@@ -25,7 +25,7 @@ class StaticTFBroadcaster(Node):
         imu_tf.transform.translation.z = 0.0
         imu_tf.transform.rotation.w = 1.0
 
-        broadcaster.send_transforms([laser_tf, imu_tf])
+        broadcaster.sendTransform([laser_tf, imu_tf])
         self.get_logger().info(
             "Published static transforms: base_link -> laser, base_link -> imu_link"
         )

@@ -1,0 +1,71 @@
+base_link_mass: 30.0
+base_link_offset: 0.0
+base_width: 0.6
+base_len: 0.8
+base_height: 0.2
+base_wheel_gap_z: 0.1
+
+base_collision: true
+lifter: false
+
+lift_bed_mass: 8.0
+lift_bed_width: 0.5
+lift_bed_len: 0.6
+lift_bed_height: 0.08
+
+wheel_mass: 2.0
+wheel_radius: 0.08
+wheel_thickness: 0.05
+wheel_seperation: 0.447967
+
+caster_wheel_mass: 0.5
+caster_wheel_radius: 0.05
+caster_wheel_seperation: 0.4
+caster_wheel_offset_front: 0.2
+caster_wheel_offset_rear: -0.2
+
+camera_box_mass: 0.5
+camera_box_length: 0.1
+camera_box_width: 0.1
+camera_box_height: 0.1
+camera_offset_x: 0.2
+camera_offset_z: 0.3
+camera_pitch_angle: 0.0
+
+lidar_box_mass: 0.5
+lidar_box_size: 0.1
+
+imu_box_mass: 0.2
+imu_box_len_wdt: 0.08
+imu_box_thickness: 0.02
+imu_box_offset_x: 0.0
+imu_box_offset_y: 0.0
+
+lidar_xyz: [0.2, 0.0, 0.21]
+lidar_rpy: [0.0, 0.0, 0.0]
+
+camera_parameters:
+  frequency: 30.0
+  horizontal_fov: 1.047
+  width: 640
+  height: 480
+  no_of_camera: 1
+  pgv: false
+
+lidar_parameters:
+  lidar_type: "2D"
+  no_of_lidar: 1
+  visualization: true
+  frequency: 10.0
+  horizontal:
+    samples: 720
+    resolution: 1.0
+    min_angle: -180.0
+    max_angle: 180.0
+  vertical:
+    samples: 1
+    resolution: 1.0
+    min_angle: 0.0
+    max_angle: 0.0
+  min_range: 0.05
+  max_range: 10.0

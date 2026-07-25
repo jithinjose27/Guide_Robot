@@ -23,9 +23,5 @@ setup(
     extras_require={
         "test": ["pytest"],
     },
-    entry_points={
-        "console_scripts": [
-            "slam_toolbox_node=glad_mapping.slam_toolbox_node:main",
-        ],
-    },
+    entry_points={},
 )

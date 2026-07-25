@@ -168,8 +168,9 @@ class RPLidarNode(Node):
 
     def destroy_node(self):
         self.running = False
-        if self.scan_thread and self.scan_thread.is_alive():
-            self.scan_thread.join(timeout=2.0)
+        thread = getattr(self, "scan_thread", None)
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
         if self.serial and self.serial.is_open:
             try:
                 self._send_cmd(CMD_STOP)

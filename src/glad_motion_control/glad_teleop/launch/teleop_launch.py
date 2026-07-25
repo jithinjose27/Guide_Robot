@@ -46,6 +46,7 @@ def generate_launch_description():
                 package="glad_teleop",
                 executable="teleop_node",
                 name="teleop_keyboard",
+                prefix="xterm -hold -T GLAD_Teleop -e",
                 output="screen",
                 parameters=[LaunchConfiguration("config_file")],
             ),

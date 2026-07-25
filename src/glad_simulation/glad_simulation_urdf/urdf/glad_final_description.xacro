@@ -1,0 +1,197 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="glad">
+
+  <xacro:include filename="glad_macros.xacro" />
+  <xacro:include filename="glad_materials.xacro" />
+  <xacro:include filename="glad_params.xacro" />
+  <xacro:include filename="glad_gazebo.xacro" />
+
+
+  <link name="base_footprint" />
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint" />
+    <child link="base_link" />
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+  </joint>
+
+  <link name="base_link">
+    <xacro:box_inertia m="${base_link_mass}" w="${base_len}" h="${base_height}" d="${base_width}" xyz="${base_link_offset} 0.0 ${base_wheel_gap_z}" rpy="0.0 0.0 0.0" />
+    <visual>
+      <material name="red" />
+      <origin xyz="${base_link_offset} 0.0 ${base_wheel_gap_z}" rpy="0.0 0.0 0.0" />
+      <geometry>
+        <box size="${base_len} ${base_width} ${base_height}" />
+      </geometry>
+    </visual>
+    <xacro:if value="${props['base_collision']}">
+      <collision>
+        <origin xyz="${base_link_offset} 0.0 ${base_wheel_gap_z}" rpy="0.0 0.0 0.0" />
+        <geometry>
+          <box size="${base_len} ${base_width} ${base_height}" />
+        </geometry>
+      </collision>
+    </xacro:if>
+  </link>
+
+  <link name="base_link_dock"/>
+  <joint name="base_dock_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="base_link_dock" />
+    <origin xyz="0.0 0.0 ${wheel_radius}" rpy="0.0 0.0 3.14" />
+  </joint>
+
+  <xacro:macro name="wheel" params="prefix reflect">
+    <link name="${prefix}_wheel">
+      <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_thickness}" xyz="0.0 0.0 0.0" rpy="${pi/2} 0.0 0.0" />
+      <visual>
+        <material name="orange" />
+        <origin xyz="0.0 0.0 0.0" rpy="${pi/2} 0.0 0.0" />
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_thickness}" />
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0.0 0.0 0.0" rpy="${pi/2} 0.0 0.0" />
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_thickness}" />
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <axis xyz="0.0 1.0 0.0" rpy="0.0 0.0 0.0" />
+      <parent link="base_link" />
+      <child link="${prefix}_wheel" />
+      <origin xyz="0.0 ${(wheel_seperation/2)*reflect} 0" rpy="0.0 0.0 0.0" />
+      <dynamics damping="0.0" friction="0.0" />
+    </joint>
+  </xacro:macro>
+
+  <xacro:wheel prefix="left" reflect="1" />
+  <xacro:wheel prefix="right" reflect="-1" />
+
+  <transmission name="left_wheel_transmission">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="left_wheel_joint">
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="left_wheel_motor">
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <transmission name="right_wheel_transmission">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="right_wheel_joint">
+      <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="right_wheel_motor">
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
+
+  <xacro:macro name="caster_wheel" params="prefix reflect offset_x">
+    <link name="${prefix}_caster_wheel">
+      <xacro:sphere_inertia m="${caster_wheel_mass}" r="${caster_wheel_radius}" xyz="0.0 0.0 0.0" rpy="${pi/2} 0.0 0.0" />
+      <visual>
+        <material name="blue" />
+        <origin xyz="0.0 0.0 0.0" rpy="${pi/2} 0.0 0.0" />
+        <geometry>
+          <sphere radius="${caster_wheel_radius}" />
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0.0 0.0 0.0" rpy="${pi/2} 0.0 0.0" />
+        <geometry>
+          <sphere radius="${caster_wheel_radius}" />
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="${prefix}_caster_wheel_joint" type="fixed">
+      <parent link="base_link" />
+      <child link="${prefix}_caster_wheel" />
+      <origin xyz="${offset_x} ${(caster_wheel_seperation/2)*reflect} -${(wheel_radius-caster_wheel_radius)}" rpy="0.0 0.0 0.0" />
+    </joint>
+  </xacro:macro>
+
+  <xacro:if value="${caster_wheel_offset_front != 0}">
+    <xacro:caster_wheel prefix="front_left" reflect="1"  offset_x="${caster_wheel_offset_front}" />
+    <xacro:caster_wheel prefix="front_right" reflect="-1" offset_x="${caster_wheel_offset_front}" />
+  </xacro:if>
+
+  <xacro:if value="${caster_wheel_offset_rear != 0}">
+    <xacro:caster_wheel prefix="back_left"  reflect="1"  offset_x="${caster_wheel_offset_rear}" />
+    <xacro:caster_wheel prefix="back_right" reflect="-1" offset_x="${caster_wheel_offset_rear}" />
+  </xacro:if>
+
+  <xacro:if value="${bringup == 'simulation'}">
+    <xacro:glad_gazebo />
+  </xacro:if>
+
+  <link name="lidar_link">
+    <xacro:box_inertia m="${lidar_box_mass}" w="${lidar_box_size}" h="${lidar_box_size}" d="${lidar_box_size}" xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+      <geometry>
+        <box size="${lidar_box_size} ${lidar_box_size} ${lidar_box_size}" />
+      </geometry>
+      <material name="sky_blue" />
+    </visual>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <axis xyz="0.0 1.0 0.0" rpy="0.0 0.0 0.0" />
+    <origin xyz="${props['lidar_xyz'][0]} ${props['lidar_xyz'][1]} ${props['lidar_xyz'][2]}" rpy="${props['lidar_rpy'][0]} ${props['lidar_rpy'][1]} ${props['lidar_rpy'][2]}" />
+    <parent link="base_link" />
+    <child link="lidar_link" />
+  </joint>
+
+  <link name="camera_link">
+    <xacro:box_inertia m="${camera_box_mass}" w="${camera_box_width}" h="${camera_box_height}" d="${camera_box_length}" xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+      <geometry>
+        <box size="${camera_box_length} ${camera_box_width} ${camera_box_height}" />
+      </geometry>
+      <material name="yellow" />
+    </visual>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <origin xyz="${camera_offset_x} 0.0 ${camera_offset_z-wheel_radius}" rpy="0.0 ${camera_pitch_angle} 0.0" />
+    <parent link="base_link" />
+    <child link="camera_link" />
+  </joint>
+
+  <link name="camera_optical_link" />
+  <joint name="camera_optical_joint" type="fixed">
+    <origin xyz="0.0 0.0 0.0" rpy="${-pi/2} 0.0 ${-pi/2}" />
+    <parent link="camera_link" />
+    <child link="camera_optical_link" />  </joint>
+
+  <link name="imu_link">
+    <xacro:box_inertia m="${imu_box_mass}" w="${imu_box_len_wdt}" h="${imu_box_len_wdt}" d="${imu_box_thickness}" xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+      <geometry>
+        <box size="${imu_box_len_wdt} ${imu_box_len_wdt} ${imu_box_thickness}" />
+      </geometry>
+      <material name="magenta" />
+    </visual>
+    <collision>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+      <geometry>
+        <box size="${imu_box_len_wdt} ${imu_box_len_wdt} ${imu_box_thickness}" />
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="imu_joint" type="fixed">
+    <origin xyz="${imu_box_offset_x} ${imu_box_offset_y} ${-((base_height/2)+(imu_box_thickness/2))+base_wheel_gap_z}" rpy="0.0 0.0 0.0" />
+    <parent link="base_link" />
+    <child link="imu_link" />
+  </joint>
+
+</robot>

@@ -1,0 +1,7 @@
+/**:
+    ros__parameters:
+        timeout: 0.5
+        accel_linear: 0.2
+        decel_linear: 0.4
+        accel_angular: 0.4
+        decel_angular: 0.8

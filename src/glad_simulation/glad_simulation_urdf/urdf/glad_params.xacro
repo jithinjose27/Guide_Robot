@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="yaml_file" default="$(find glad_simulation_urdf)/config/glad_urdf.yaml" />
+  <xacro:arg name="bringup" default="$(optenv GLAD_BRINGUP simulation)"/>
+  <xacro:property name="bringup" value="$(arg bringup)"/>
+  <!-- Yaml parameters -->
+  <xacro:property name="yaml_file" value="$(arg yaml_file)" />
+  <xacro:property name="props" value="${xacro.load_yaml(yaml_file)}"/>
+
+
+
+  <!-- Properties of the models -->
+
+  <xacro:property name="base_link_mass"   			      value="${props['base_link_mass']}" />
+  <xacro:property name="base_link_offset"   		      value="${props['base_link_offset']}" />
+  <xacro:property name="base_width"       			      value="$(optenv ROBOT_WIDTH ${props['base_width']})" />
+  <xacro:property name="base_len" 					          value="$(optenv ROBOT_LENGTH ${props['base_len']})" />
+  <xacro:property name="base_height" 				          value="${props['base_height']}" />
+  <xacro:property name="base_wheel_gap_z" 			      value="${props['base_wheel_gap_z']}" />
+
+  <xacro:property name="lift_bed_mass" 				        value="${props['lift_bed_mass']}" />
+  <xacro:property name="lift_bed_width" 			        value="${props['lift_bed_width']}" />
+  <xacro:property name="lift_bed_len" 				        value="${props['lift_bed_len']}" />
+  <xacro:property name="lift_bed_height" 			        value="${props['lift_bed_height']}" />
+
+  <xacro:property name="wheel_mass" 				          value="${props['wheel_mass']}" />
+  <xacro:property name="wheel_radius" 				        value="${props['wheel_radius']}" />
+  <xacro:property name="wheel_thickness" 			        value="${props['wheel_thickness']}" />
+  <xacro:property name="wheel_seperation" 		        value="${props['wheel_seperation']}" />
+
+  <xacro:property name="caster_wheel_mass" 		        value="${props['caster_wheel_mass']}" />
+  <xacro:property name="caster_wheel_radius" 	        value="${props['caster_wheel_radius']}" />
+  <xacro:property name="caster_wheel_seperation"	    value="${props['caster_wheel_seperation']}" />
+  <xacro:property name="caster_wheel_offset_front" 		value="${props['caster_wheel_offset_front']}" />
+  <xacro:property name="caster_wheel_offset_rear" 		value="${props['caster_wheel_offset_rear']}" />
+
+
+  <xacro:property name="camera_box_mass" 			        value="${props['camera_box_mass']}" />
+  <xacro:property name="camera_box_length" 			      value="${props['camera_box_length']}" />
+  <xacro:property name="camera_box_width" 			      value="${props['camera_box_width']}" />
+  <xacro:property name="camera_box_height" 			      value="${props['camera_box_height']}" />
+  <xacro:property name="camera_offset_x" 		          value="${props['camera_offset_x']}" />
+  <xacro:property name="camera_offset_z" 		          value="${props['camera_offset_z']}" />
+  <xacro:property name="camera_pitch_angle" 			    value="${props['camera_pitch_angle']}" />
+
+  <xacro:property name="lidar_type" 			            value="$(optenv LIDAR_TYPE ${props['lidar_parameters']['lidar_type']})" />
+  <xacro:property name="no_of_lidar"                  value="$(optenv NO_OF_LIDAR ${props['lidar_parameters']['no_of_lidar']})"/>
+  <xacro:property name="lidar_box_mass" 			        value="${props['lidar_box_mass']}" />
+  <xacro:property name="lidar_box_size" 			        value="${props['lidar_box_size']}" />
+
+  <xacro:property name="imu_box_mass" 				        value="${props['imu_box_mass']}" />
+  <xacro:property name="imu_box_len_wdt" 			        value="${props['imu_box_len_wdt']}" />
+  <xacro:property name="imu_box_thickness" 			      value="${props['imu_box_thickness']}" />
+  <xacro:property name="imu_box_offset_x" 			      value="${props['imu_box_offset_x']}" />
+  <xacro:property name="imu_box_offset_y" 			      value="${props['imu_box_offset_y']}" />
+
+</robot>

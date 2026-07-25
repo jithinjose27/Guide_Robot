@@ -1,0 +1,95 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- Materials for RViz -->
+    <material name="blue">
+        <color rgba="0.0 0.0 1.0 1.0"/>
+    </material>
+
+    <material name="red">
+        <color rgba="1.0 0.0 0.0 1.0"/>
+    </material>
+
+    <material name="green">
+        <color rgba="0.0 1.0 0.0 1.0"/>
+    </material>
+
+    <material name="orange">
+        <color rgba="0.7 0.6 0.0 1.0"/>
+    </material>
+
+    <material name="yellow">
+        <color rgba="0.8 0.9 0.0 1.0"/>
+    </material>
+
+    <material name="sky_blue">
+        <color rgba="0.4 1.0 1.0 1.0"/>
+    </material>
+
+    <material name="magenta">
+        <color rgba="1.0 0.0 1.0 1.0"/>
+    </material>
+
+    <!-- Materials for Gazebo -->
+
+    <!-- Material for the base link -->
+    <gazebo reference="base_link">
+        <material>Gazebo/Red</material>
+    </gazebo>
+
+    <!-- Material for the lift bed link -->
+    <gazebo reference="lift_bed_link">
+        <material>Gazebo/Green</material>
+    </gazebo>
+
+    <!-- Material for differential drive wheels -->
+    <xacro:macro name="wheel_material" params="prefix">
+        <gazebo reference="${prefix}_wheel">
+            <material>Gazebo/Orange</material>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:wheel_material prefix="left"/>
+    <xacro:wheel_material prefix="right"/>
+
+    <!-- Material for caster wheel links -->
+    <xacro:macro name="caster_wheel_material" params="prefix">
+        <gazebo reference="${prefix}_caster_wheel">
+            <material>Gazebo/Blue</material>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:caster_wheel_material prefix="front_left"/>
+    <xacro:caster_wheel_material prefix="front_right"/>
+    <xacro:caster_wheel_material prefix="back_left"/>
+    <xacro:caster_wheel_material prefix="back_right"/>
+
+    <!-- Material for the camera links -->
+    <xacro:macro name="camera_link_material" params="prefix">
+        <gazebo reference="${prefix}_link">
+            <material>Gazebo/Yellow</material>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:camera_link_material prefix="front_camera"/>
+    <xacro:camera_link_material prefix="bottom_camera"/>
+    <xacro:camera_link_material prefix="rear_camera"/>
+
+    <!-- Material for the LIDAR linkss -->
+    <xacro:macro name="lidar_link_material" params="prefix">
+        <gazebo reference="${prefix}_link">
+            <material>Gazebo/SkyBlue</material>
+        </gazebo>
+    </xacro:macro>
+
+    <xacro:lidar_link_material prefix="front_lidar"/>
+    <xacro:lidar_link_material prefix="rear_lidar"/>
+    <xacro:lidar_link_material prefix="lidar"/>
+
+
+    <!-- Material for the IMU link -->
+    <gazebo reference="imu_link">
+        <material>Gazebo/Purple</material>
+    </gazebo>
+
+</robot>

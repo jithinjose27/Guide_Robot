@@ -22,6 +22,7 @@
 | `glad_static_tf/` | Static transform broadcaster for sensor mount offsets (`base_link` → `laser`, `base_link` → `imu_link`). |
 | `glad_tour/` | Autonomous tour guide — navigates predefined waypoints via Nav2 and delivers AI-generated spoken commentary using Gemini + gTTS. |
 | `glad_voice/` | Voice-activated AI assistant with wake word detection, Google STT, Gemini streaming responses, and Edge TTS. |
+| `glad_simulation/` | Gazebo-based simulation stack for the G.L.A.D robot. Includes URDF/Gazebo integration, curses teleop, twist mux, trajectory controller, EKF sensor fusion, SLAM Toolbox, and Nav2. See [`src/glad_simulation/README.md`](src/glad_simulation/README.md). |
 | `start_glad/` | Top-level bringup packages: `glad_bringup` (full system bringup for testing/navigation) and `glad_final_tour` (complete project showcase including the autonomous tour). |
 | `x_old_bringup/` | Archived/legacy bringup (kept for reference). |
 

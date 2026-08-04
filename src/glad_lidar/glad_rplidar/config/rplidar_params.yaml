@@ -6,3 +6,4 @@ glad_rplidar:
     inverted: false
     angle_compensate: true
     scan_mode: Sensitivity
+    scan_topic: /scan_unfiltered

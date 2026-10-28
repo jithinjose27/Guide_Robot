@@ -254,40 +254,55 @@ time_time = __import__("time").time
 
 
 def main():
-    os.dup2(os.open(LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644), 2)
+    try:
+        os.dup2(os.open(LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644), 2)
+    except Exception:
+        pass
 
     rclpy.init(args=sys.argv)
     node = TeleopKeyboard()
 
-    stdscr = curses.initscr()
-    curses.start_color()
-    setup_colors()
-    curses.cbreak()
-    stdscr.keypad(True)
-    curses.curs_set(0)
-    stdscr.nodelay(True)
+    stdscr = None
+    try:
+        stdscr = curses.initscr()
+        curses.start_color()
+        setup_colors()
+        curses.cbreak()
+        stdscr.keypad(True)
+        curses.curs_set(0)
+        stdscr.nodelay(True)
+    except Exception as e:
+        node.get_logger().info(
+            f"Interactive terminal interface not available ({e}). "
+            "To manually drive using keys, run in an interactive window: "
+            "'ros2 run glad_teleop teleop_node'"
+        )
 
     try:
-        while node.running and rclpy.ok():
-            ch = stdscr.getch()
-            if ch != -1:
-                node.on_key(ch)
+        if stdscr is not None:
+            while node.running and rclpy.ok():
+                ch = stdscr.getch()
+                if ch != -1:
+                    node.on_key(ch)
 
-            rclpy.spin_once(node, timeout_sec=0)
-
-            node.update()
-
-            draw_ui(stdscr, node)
-
-            __import__("time").sleep(0.01)
-    except KeyboardInterrupt:
+                rclpy.spin_once(node, timeout_sec=0)
+                node.update()
+                draw_ui(stdscr, node)
+                __import__("time").sleep(0.01)
+        else:
+            rclpy.spin(node)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.pub_cmd.publish(Twist())
         node.pub_stop.publish(Bool(data=False))
         node.destroy_node()
-        curses.curs_set(1)
-        curses.endwin()
+        if stdscr is not None:
+            try:
+                curses.curs_set(1)
+                curses.endwin()
+            except Exception:
+                pass
         if rclpy.ok():
             rclpy.shutdown()
         print(f"GLAD Teleop stopped. Log: {LOG_FILE}")

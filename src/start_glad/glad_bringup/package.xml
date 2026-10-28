@@ -2,12 +2,27 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>glad_bringup</name>
-  <version>0.0.0</version>
-  <description>G.L.A.D. Bringup Package</description>
-  <maintainer email="jithin27j@gmail.com">root</maintainer>
-  <license>Apache 2.0</license>
+  <version>1.0.0</version>
+  <description>Full system bringup package for the G.L.A.D mobile robot</description>
+  <maintainer email="jithin27j@gmail.com">Jithin Jose</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>glad_maps</exec_depend>
+  <exec_depend>glad_static_tf</exec_depend>
+  <exec_depend>glad_rplidar</exec_depend>
+  <exec_depend>glad_laser_filter</exec_depend>
+  <exec_depend>glad_imu_publisher</exec_depend>
+  <exec_depend>glad_imu_filter</exec_depend>
+  <exec_depend>rf2o_laser_odometry</exec_depend>
+  <exec_depend>glad_sensor_filter</exec_depend>
+  <exec_depend>glad_mapping</exec_depend>
+  <exec_depend>glad_teleop</exec_depend>
+  <exec_depend>glad_twist_mux</exec_depend>
+  <exec_depend>glad_trajectory_controller</exec_depend>
+  <exec_depend>glad_motor_controller</exec_depend>
+  <exec_depend>glad_navigation</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

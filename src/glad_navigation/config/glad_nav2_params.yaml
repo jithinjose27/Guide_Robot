@@ -115,11 +115,7 @@ local_costmap:
       width: 5
       height: 5
       resolution: 0.05
-      #robot_radius: 0.4
-      footprint: "[[0.25, 0.25],
-        [0.25, -0.25],
-        [-0.25, -0.25],
-        [-0.25, 0.25]]"
+      footprint: "[ [0.25, 0.25], [0.25, -0.25], [-0.25, -0.25], [-0.25, 0.25] ]"
       footprint_padding: 0.01
       plugins: ["obstacle_layer", "inflation_layer"]
       obstacle_layer:
@@ -149,16 +145,11 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      #robot_radius: 0.3
-      footprint: "[[0.25, 0.25],
-        [0.25, -0.25],
-        [-0.25, -0.25],
-        [-0.25, 0.25]]"
+      footprint: "[ [0.25, 0.25], [0.25, -0.25], [-0.25, -0.25], [-0.25, 0.25] ]"
       footprint_padding: 0.01
       resolution: 0.05
       track_unknown_space: true
-      plugins:
-        ["static_layer", "obstacle_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -199,7 +190,7 @@ planner_server:
     planner_plugins: ["GridBased"]
     costmap_update_timeout: 2.0
     GridBased:
-      plugin: "nav2_navfn_planner/NavfnPlanner"
+      plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 0.5
       use_astar: true
       allow_unknown: true
@@ -223,13 +214,13 @@ behavior_server:
     cycle_frequency: 10.0
     behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
     spin:
-      plugin: "nav2_behaviors/Spin"
+      plugin: "nav2_behaviors::Spin"
     backup:
-      plugin: "nav2_behaviors/BackUp"
+      plugin: "nav2_behaviors::BackUp"
     drive_on_heading:
-      plugin: "nav2_behaviors/DriveOnHeading"
+      plugin: "nav2_behaviors::DriveOnHeading"
     wait:
-      plugin: "nav2_behaviors/Wait"
+      plugin: "nav2_behaviors::Wait"
     local_frame: odom
     global_frame: map
     robot_base_frame: base_link
@@ -249,17 +240,3 @@ waypoint_follower:
       plugin: "nav2_waypoint_follower::WaitAtWaypoint"
       enabled: True
       waypoint_pause_duration: 200
-#velocity_smoother:
-#  ros__parameters:
-#    smoothing_frequency: 20.0
-#    stamp_smoothed_velocity_with_smoothing_time: False
-#    scale_velocities: False
-#    feedback: "OPEN_LOOP"
-#    max_velocity: [0.07, 0.0, 0.2]
-#    min_velocity: [-0.1, 0.0, -0.2]
-#    max_accel: [0.5, 0.0, 1.0]
-#    max_decel: [-0.5, 0.0, -1.0]
-#    odom_topic: "/odom"
-#    odom_duration: 0.1
-#    deadband_velocity: [0.0, 0.0, 0.0]
-#    velocity_timeout: 1.0

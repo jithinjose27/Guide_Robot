@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+Trajectory Slew-Rate Limiter Node for G.L.A.D.
+
+Applies independent acceleration and deceleration bounds to linear and angular
+velocity commands, ensuring smooth motor transitions and preventing wheel slip.
+"""
+
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
@@ -14,11 +22,11 @@ class TrajectoryController(Node):
         self.declare_parameter("accel_angular", 0.4)
         self.declare_parameter("decel_angular", 0.8)
 
-        self.timeout = self.get_parameter("timeout").value
-        self.accel_linear = self.get_parameter("accel_linear").value
-        self.decel_linear = self.get_parameter("decel_linear").value
-        self.accel_angular = self.get_parameter("accel_angular").value
-        self.decel_angular = self.get_parameter("decel_angular").value
+        self.timeout = float(self.get_parameter("timeout").value)
+        self.accel_linear = float(self.get_parameter("accel_linear").value)
+        self.decel_linear = float(self.get_parameter("decel_linear").value)
+        self.accel_angular = float(self.get_parameter("accel_angular").value)
+        self.decel_angular = float(self.get_parameter("decel_angular").value)
 
         self.target = Twist()
         self.target_stamp = self.get_clock().now()
@@ -35,16 +43,18 @@ class TrajectoryController(Node):
             f"decel: {self.decel_linear} m/s² / {self.decel_angular} rad/s²"
         )
 
-    def raw_cb(self, msg):
+    def raw_cb(self, msg: Twist):
         self.target = msg
         self.target_stamp = self.get_clock().now()
 
     @staticmethod
-    def ramp(current, target, max_change):
+    def ramp(current: float, target: float, max_change: float) -> float:
+        """Clamp change rate to [-max_change, +max_change] to prevent sudden jumps."""
         diff = target - current
-        if abs(diff) < 1e-6:
+        if abs(diff) < 1e-5:
             return target
-        return current + max(max(-max_change, diff), -max_change)
+        clamped_diff = max(-max_change, min(max_change, diff))
+        return current + clamped_diff
 
     def update(self):
         dt = 0.05
@@ -59,6 +69,7 @@ class TrajectoryController(Node):
             target_x = 0.0
             target_z = 0.0
 
+        # Choose decel rate if approaching zero, otherwise accel rate
         if abs(target_x) < abs(self.current.linear.x):
             max_x = self.decel_linear * dt
         else:
@@ -73,7 +84,11 @@ class TrajectoryController(Node):
         cmd.angular.z = self.ramp(self.current.angular.z, target_z, max_z)
 
         self.current = cmd
-        self.pub.publish(cmd)
+        if rclpy.ok():
+            try:
+                self.pub.publish(cmd)
+            except Exception:
+                pass
 
 
 def main(args=None):
@@ -81,11 +96,12 @@ def main(args=None):
     node = TrajectoryController()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

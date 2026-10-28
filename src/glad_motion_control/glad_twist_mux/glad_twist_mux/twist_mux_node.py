@@ -56,6 +56,8 @@ class TwistMux(Node):
         self.nav_stamp = self.get_clock().now()
 
     def publish_cmd(self):
+        if not rclpy.ok():
+            return
         now = self.get_clock().now()
         stop_age = (now - self.stop_stamp).nanoseconds / 1e9
         teleop_age = (now - self.teleop_stamp).nanoseconds / 1e9
@@ -71,20 +73,23 @@ class TwistMux(Node):
             self.priorities.items(), key=lambda x: x[1], reverse=True
         )
 
-        for source, _ in sorted_sources:
-            if ages[source] < self.timeout:
-                if source == "stop":
-                    if self.stop_active:
-                        self.pub.publish(Twist())
+        try:
+            for source, _ in sorted_sources:
+                if ages[source] < self.timeout:
+                    if source == "stop":
+                        if self.stop_active:
+                            self.pub.publish(Twist())
+                            return
+                    elif source == "teleop":
+                        self.pub.publish(self.teleop_twist)
                         return
-                elif source == "teleop":
-                    self.pub.publish(self.teleop_twist)
-                    return
-                elif source == "nav":
-                    self.pub.publish(self.nav_twist)
-                    return
+                    elif source == "nav":
+                        self.pub.publish(self.nav_twist)
+                        return
 
-        self.pub.publish(Twist())
+            self.pub.publish(Twist())
+        except Exception:
+            pass
 
 
 def main(args=None):
@@ -92,11 +97,12 @@ def main(args=None):
     node = TwistMux()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

@@ -1,134 +1,64 @@
-# GLAD Start
+# GLAD Start (System Bringup) 🏁
 
-Top-level bringup packages for the G.L.A.D robot. Orchestrate the entire sensor, navigation, and autonomy pipeline through time-sequenced launch files.
+Welcome to the **`start_glad`** master orchestrator! If you want to run the whole robot with a single terminal command, this is where it happens.
 
-## Packages
+---
 
-### `glad_bringup` — Full System Bringup
+## 🚀 The Two Master Launch Files
 
-Use this launch file when you simply want to navigate the robot — for testing the navigation stack or demonstrating teleoperation to someone.
+| Launch Package | When to Use It |
+|---|---|
+| **`glad_bringup`** | Use when setting up, testing navigation, driving via teleop, or building a new map with SLAM. |
+| **`glad_final_tour`** | Use for the complete grand showcase: starts all systems and immediately commands the autonomous AI tour guide! |
 
-Starts every ROS 2 node in the G.L.A.D stack with configurable SLAM vs. localization mode.
+---
 
-**Launch arguments:**
+## ⏱️ Why Are Launch Times Sequenced?
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `use_sim_time` | `false` | Use simulation clock |
-| `enable_slam` | `false` | Start slam_toolbox for online mapping (vs. using a pre-built map) |
-| `map_yaml` | `/home/.../robotics_floor.yaml` | Path to map file (used when `enable_slam:=false`) |
+If you launch 15 complex ROS 2 nodes simultaneously at timestamp $t = 0$:
+1. The laser filter tries to subscribe to `/scan_unfiltered` before the RPLidar serial port opens.
+2. The EKF tries to fuse odometry before the IMU filter computes its first orientation quaternion.
+3. Nav2 costmaps fail to load because TF transforms (`odom → base_link`) aren't published yet.
 
-**Launch sequence:**
+To prevent race conditions, `start_glad` orchestrates a smooth, bulletproof launch sequence:
 
-| Step | Package | Delay | Description |
-|------|---------|-------|-------------|
-| — | `glad_static_tf` | 0s | Static transforms (base_link → laser, base_link → imu_link) |
-| 1 | `glad_rplidar` | 0s | RPLidar serial driver → `/scan_unfiltered` |
-| 2 | `glad_laser_filter` | 1.0s | Angle crop + range filter + resample → `/scan` |
-| 3 | `glad_imu_publisher` | 1.5s | BNO055 I2C driver → `/imu/data_raw`, `/imu/mag` |
-| 4 | `glad_imu_filter` | 2.0s | Madgwick orientation filter → `/imu/data` |
-| 5 | `rf2o_laser_odometry` | 2.5s | Range-flow laser odometry → `/odom_rf2o` |
-| 6 | `glad_ekf` | 3.0s | robot_localization EKF → `odom` |
-| 7 | `slam_toolbox` | 3.5s | SLAM mapping *(only if `enable_slam:=true`)* |
-| 8 | `glad_teleop` + motion control | 4.0s | Teleop, twist mux, trajectory controller, motor bridge |
-| 9 | `glad_nav2` | 6.0s | Nav2 localization + planning + control *(only if `enable_slam:=false`)* |
+| Time | Package | What Gets Activated |
+|---|---|---|
+| **$t = 0.0\text{ s}$** | `glad_static_tf` & `glad_rplidar` | Mounting transforms broadcast; RPLidar motor spins up. |
+| **$t = 1.0\text{ s}$** | `glad_laser_filter` | Laser scan filtering and FOV cropping begins. |
+| **$t = 1.5\text{ s}$** | `glad_imu_publisher` | BNO055 $I^2C$ sensor driver starts publishing raw vectors. |
+| **$t = 2.0\text{ s}$** | `glad_imu_filter` | Madgwick orientation filter begins publishing `/imu/data`. |
+| **$t = 2.5\text{ s}$** | `rf2o_laser_odometry` | SVD scan matcher starts computing planar velocity. |
+| **$t = 3.0\text{ s}$** | `glad_sensor_filter` | EKF begins fusing odometry and broadcasting `odom → base_link`. |
+| **$t = 3.5\text{ s}$** | `glad_mapping` | *(Only in SLAM mode)* SLAM Toolbox begins building a live map. |
+| **$t = 4.0\text{ s}$** | `glad_teleop` | Twist mux, trajectory smoother, and motor bridge activate. |
+| **$t = 6.0\text{ s}$** | `glad_navigation` | *(Only in Localization mode)* AMCL and Nav2 servers initialize. |
+| **$t = 10.0\text{ s}$** | `glad_tour` | *(In `glad_final_tour`)* Autonomous tour guide begins navigating! |
 
-**Usage:**
+---
 
+## 🛠️ Usage Commands
+
+### 1. Standard Autonomous Navigation (Default Pre-built Map)
 ```bash
-# Localization mode (using pre-built map)
 ros2 launch glad_bringup glad_bringup_launch.py
+```
 
-# SLAM mode (build a new map)
+### 2. SLAM Mapping Mode (Build a New Map)
+```bash
 ros2 launch glad_bringup glad_bringup_launch.py enable_slam:=true
 ```
 
----
-
-### `glad_final_tour` — Autonomous Tour Bringup
-
-Use this launch file for the final project showcase — it launches everything including the autonomous tour, demonstrating the full capabilities of the G.L.A.D robot.
-
-Extends `glad_bringup` with the tour guide application. After all sensor and navigation nodes are running, launches the autonomous tour node.
-
-**Launch arguments:** Same as `glad_bringup`.
-
-**Launch sequence:** Identical to `glad_bringup` for steps 1–9, plus:
-
-| Step | Package | Delay | Description |
-|------|---------|-------|-------------|
-| 10 | `glad_tour` | 10.0s | Autonomous tour guide — navigates 3 waypoints with AI commentary |
-
-The 10-second delay before the tour starts gives Nav2 time to fully initialize, receive the initial pose, and load the costmaps.
-
-**Usage:**
-
+### 3. Full AI Autonomous Tour Showcase
 ```bash
-# Full autonomous tour with pre-built map
 ros2 launch glad_final_tour glad_final_tour_launch.py
-
-# Tour with live SLAM mapping
-ros2 launch glad_final_tour glad_final_tour_launch.py enable_slam:=true
 ```
 
 ---
 
-## System Architecture
-
-### Data Flow
-
-```
-RPLidar ──► glad_rplidar ──► /scan_unfiltered ──► glad_laser_filter ──► /scan ──┐
-                                                                                   │
-BNO055 ──► glad_imu_publisher ──► /imu/data_raw ──► glad_imu_filter ──► /imu/data │
-                                  /imu/mag ──────────────┘                        │
-                                                                                   │
-┌─────────────────────────────────────────────────────────────────────────────────┘
-│
-▼  /scan + /odom (EKF)
-rf2o_laser_odometry ──► /odom_rf2o ──┐
-                                      ▼
-                              glad_ekf (robot_localization) ──► /odom
-                                      ▲
-motor encoders ──► glad_motor_controller ──► /motor/odom
-```
-
-### TF Tree
-
-```
-map ──► odom ──► base_link ──┬──► laser (static)
-                              └──► imu_link (static)
-```
-
-- `map → odom`: AMCL (Nav2) or slam_toolbox.
-- `odom → base_link`: EKF filter.
-- `base_link → laser`, `base_link → imu_link`: Static transforms.
-
-### Command Flow
-
-```
-Teleop Keyboard ──► /cmd_vel/teleop ──┐
-                                       ├──► glad_twist_mux ──► /cmd_vel/raw ──► glad_trajectory_controller ──► /cmd_vel ──► glad_motor_controller ──► ESP32
-Nav2 ──► /cmd_vel/nav ────────────────┘
-```
-
-## Dependencies
-
-Requires all G.L.A.D packages to be built:
-
-- `glad_rplidar`, `glad_laser_filter`
-- `glad_imu_publisher`, `glad_imu_filter`
-- `rf2o_laser_odometry`
-- `glad_sensor_filter`
-- `glad_mapping`
-- `glad_static_tf`
-- `glad_teleop`, `glad_twist_mux`, `glad_trajectory_controller`, `glad_motor_controller`
-- `glad_navigation`
-- `glad_tour` (for `glad_final_tour`)
-
-## Build
+## 📦 Building
 
 ```bash
-colcon build
+colcon build --packages-select glad_bringup glad_final_tour
 source install/setup.bash
 ```

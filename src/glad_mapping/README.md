@@ -1,82 +1,86 @@
-# GLAD Mapping
+# GLAD Mapping (SLAM Toolbox) 🗺️
 
-ROS 2 mapping package wrapping **slam_toolbox** for laser-based SLAM.
+Welcome to the **`glad_mapping`** package! This package provides the robot's ability to explore an unknown environment and draw its own map from scratch using **SLAM (Simultaneous Localization and Mapping)**.
 
-## Overview
+---
 
-Starts a `slam_toolbox` node configured for online mapping. It subscribes to filtered laser scans and odometry, performs scan matching and loop closure via Ceres solver, and publishes an occupancy grid map.
+## 🔍 How SLAM Works
 
-**Topics subscribed:**
+Imagine walking into a dark, unfamiliar building with a flashlight. Every step you take, you ask:
+- *"Where did I just walk from?"* (Odometry tracking)
+- *"What walls or obstacles do I see around me?"* (Laser scanning)
+- *"Have I been in this hallway before?"* (Loop closure)
 
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/scan` | `sensor_msgs/LaserScan` | Filtered laser scan (544 beams, front-facing) |
-| `/tf` | `tf2_msgs/TFMessage` | Transform tree (`odom → base_link`) |
+SLAM solves the classic "chicken-and-egg" robotics dilemma: you need a map to know where you are, but you need to know where you are to build a map!
 
-**Topics published:**
-
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/map` | `nav_msgs/OccupancyGrid` | Occupancy grid map |
-| `/map_metadata` | `nav_msgs/MapMetaData` | Map metadata |
-| `/tf` | `tf2_msgs/TFMessage` | Transform `map → odom` |
-
-## Parameters
-
-Full configuration in `config/slam_toolbox.yaml`:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `mode` | `mapping` | SLAM mode (mapping / localization) |
-| `solver_plugin` | `solver_plugins::CeresSolver` | Scan matching solver |
-| `resolution` | `0.05` | Map resolution (m/cell) |
-| `map_update_interval` | `2.0` | Seconds between map publications |
-| `max_laser_range` | `10.0` | Maximum laser range (m) |
-| `min_laser_range` | `0.05` | Minimum laser range (m) |
-| `scan_topic` | `/scan` | Input scan topic |
-| `do_loop_closing` | `true` | Enable loop closure detection |
-| `loop_search_maximum_distance` | `3.0` | Max distance for loop closure search (m) |
-| `loop_match_minimum_response_coarse` | `0.35` | Minimum correlation for coarse loop match |
-| `loop_match_minimum_response_fine` | `0.45` | Minimum correlation for fine loop match |
-| `correlation_search_space_dimension` | `0.5` | Local search window (m) |
-| `correlation_search_space_resolution` | `0.01` | Search space resolution (m) |
-| `coarse_angle_resolution` | `0.0349` | ~2° coarse angle search step (rad) |
-| `fine_search_angle_offset` | `0.00349` | ~0.2° fine angle search step (rad) |
-| `transform_timeout` | `0.5` | TF lookup timeout (s) |
-| `tf_buffer_duration` | `30.0` | TF buffer duration (s) |
-| `scan_buffer_size` | `100` | Number of scans stored for matching |
-| `minimum_travel_distance` | `0.05` | Min travel before adding a scan node (m) |
-| `minimum_travel_heading` | `0.05` | Min heading change before adding node (rad) |
-| `minimum_time_interval` | `0.5` | Min time between scan nodes (s) |
-| `map_file_name` | `"my_map"` | Base filename for saving the map |
-| `use_map_saver` | `true` | Enable map saver service |
-| `enable_interactive_mode` | `true` | Allow interactive mode |
-
-## Launch
-
+### The SLAM Toolbox Pipeline:
 ```
-ros2 launch glad_mapping slam_toolbox_launch.py
+           LiDAR (/scan)                 Odometry (/odom)
+                 │                              │
+                 └──────────────┬───────────────┘
+                                ▼
+                 ┌─────────────────────────────┐
+                 │        SLAM Toolbox         │
+                 │     (async_slam_toolbox)    │
+                 │  - Scan matching            │
+                 │  - Pose graph construction  │
+                 │  - Ceres Solver optimization│
+                 └──────────────┬──────────────┘
+                                │
+                 ┌──────────────┴──────────────┐
+                 ▼                             ▼
+        Topic: /map                    TF Transform:
+    (nav_msgs/OccupancyGrid)         map ──► odom
 ```
 
-Starts the `slam_toolbox` node with parameters loaded from `config/slam_toolbox.yaml`.
+---
 
-## Saving a Map
+## 💡 What Makes SLAM Toolbox Special?
 
-With `use_map_saver: true`, call the map saver service:
+G.L.A.D uses `slam_toolbox` in **asynchronous mapping mode**:
+1. **Pose Graph Optimization (Ceres Solver):** Every key scan is saved as a node in an elastic graph connected by mathematical springs (transform constraints).
+2. **Loop Closure Detection:** When the robot drives in a circle and returns to a room it visited earlier, it recognizes the laser signature, snaps the graph together, and eliminates accumulated odometry drift across the entire map!
+3. **Large Scale Mapping:** Can easily map buildings, campus floors, and warehouses without running out of memory.
 
-```
-ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: 'my_map'}}"
-```
+---
 
-Maps are saved to the current working directory as `my_map.yaml` + `my_map.pgm`.
+## 🛠️ Key Configuration Parameters (`config/slam_toolbox.yaml`)
 
-## Dependencies
+| Parameter | Value | What it means |
+|---|---|---|
+| `mode` | `mapping` | Active online map construction. |
+| `solver_plugin` | `solver_plugins::CeresSolver` | Non-linear least squares optimization engine. |
+| `resolution` | `0.05` | Grid resolution ($5\text{ cm}$ per cell). |
+| `max_laser_range` | `10.0 m` | Maximum usable distance for laser rays. |
+| `min_laser_range` | `0.05 m` | Minimum threshold to discard self-hits. |
+| `do_loop_closing` | `true` | Automatically detects and closes loops. |
+| `minimum_travel_distance` | `0.05 m` | Adds a new graph node every $5\text{ cm}$ of robot travel. |
+| `minimum_travel_heading` | `0.05 rad` | Adds a new graph node every $\sim 2.8^\circ$ of turning. |
 
-- ROS 2 (`rclpy`, `launch_ros`)
-- `sensor_msgs`, `nav_msgs`
-- `slam_toolbox` (binary, not included in this package)
+---
 
-## Build
+## 🚀 How to Build a Map of Your Space
+
+1. **Start the bringup stack in SLAM mode:**
+   ```bash
+   ros2 launch glad_bringup glad_bringup_launch.py enable_slam:=true
+   ```
+2. **Drive the robot slowly:**
+   - In a separate terminal, open teleop:
+     ```bash
+     ros2 run glad_teleop teleop_node
+     ```
+   - Drive at moderate speeds ($0.1 - 0.2\text{ m/s}$).
+   - Loop back to previously visited areas to let loop closure snap the walls straight.
+3. **Save your completed map:**
+   ```bash
+   ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: 'my_floor_map'}}"
+   ```
+   This generates `my_floor_map.pgm` and `my_floor_map.yaml` in your terminal directory.
+
+---
+
+## 📦 Building
 
 ```bash
 colcon build --packages-select glad_mapping

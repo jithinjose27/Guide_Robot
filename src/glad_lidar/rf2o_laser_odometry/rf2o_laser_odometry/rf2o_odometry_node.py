@@ -1,12 +1,20 @@
+#!/usr/bin/env python3
+"""
+Range-Flow / Scan-Matching Laser Odometry for G.L.A.D.
+
+Estimates 2D planar velocity and accumulated pose by matching consecutive
+laser scan returns via SVD-based rigid transform alignment (Kabsch algorithm).
+Publishes nav_msgs/Odometry for sensor fusion in robot_localization / EKF.
+"""
+
 import math
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3, TransformStamped
 from tf2_ros import TransformBroadcaster
-from geometry_msgs.msg import TransformStamped
 
 
 class RF2oOdometryNode(Node):
@@ -22,7 +30,7 @@ class RF2oOdometryNode(Node):
 
         scan_topic = self.get_parameter("laser_scan_topic").value
         odom_topic = self.get_parameter("odom_topic").value
-        self.publish_tf = self.get_parameter("publish_tf").value
+        self.publish_tf = bool(self.get_parameter("publish_tf").value)
         self.base_frame_id = self.get_parameter("base_frame_id").value
         self.odom_frame_id = self.get_parameter("odom_frame_id").value
 
@@ -42,67 +50,84 @@ class RF2oOdometryNode(Node):
         self.last_time = None
 
         self.get_logger().info(
-            f"RF2oOdometryNode started: {scan_topic} -> {odom_topic}"
+            f"RF2oOdometryNode active: {scan_topic} -> {odom_topic} (publish_tf={self.publish_tf})"
         )
 
     def scan_callback(self, msg: LaserScan):
         current_time = self.get_clock().now()
         ranges = np.array(msg.ranges, dtype=np.float32)
-        angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
+        n_pts = len(ranges)
+        if n_pts < 20:
+            return
 
-        ranges = np.clip(ranges, msg.range_min, msg.range_max)
-        valid = np.isfinite(ranges) & (ranges > msg.range_min)
-        ranges[~valid] = 0.0
+        angles = msg.angle_min + np.arange(n_pts) * msg.angle_increment
+
+        # Valid mask
+        valid = np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)
 
         if self.prev_ranges is not None and self.last_time is not None:
             dt = (current_time - self.last_time).nanoseconds * 1e-9
-            if dt > 0:
+            if 0.001 < dt < 1.0 and len(self.prev_ranges) == n_pts:
                 vx, vy, vyaw = self._compute_motion(
                     self.prev_ranges,
                     ranges,
-                    self.prev_angle_min,
-                    self.prev_angle_increment,
+                    self.prev_valid,
+                    valid,
                     angles,
-                    msg.angle_increment,
+                    dt,
                 )
 
-                self.x += (vx * math.cos(self.yaw) - vy * math.sin(self.yaw)) * dt
-                self.y += (vx * math.sin(self.yaw) + vy * math.cos(self.yaw)) * dt
+                # Integrate displacement in robot world frame
+                dx = (vx * math.cos(self.yaw) - vy * math.sin(self.yaw)) * dt
+                dy = (vx * math.sin(self.yaw) + vy * math.cos(self.yaw)) * dt
+                self.x += dx
+                self.y += dy
                 self.yaw += vyaw * dt
+                # Normalize yaw to [-pi, pi]
+                self.yaw = math.atan2(math.sin(self.yaw), math.cos(self.yaw))
 
                 self._publish_odometry(current_time, vx, vy, vyaw)
 
         self.prev_ranges = ranges.copy()
+        self.prev_valid = valid.copy()
         self.prev_angle_min = msg.angle_min
         self.prev_angle_increment = msg.angle_increment
         self.last_time = current_time
 
-    def _compute_motion(
-        self, prev_ranges, curr_ranges, prev_amin, prev_ainc, curr_angles, curr_ainc
-    ):
-        prev_angles = prev_amin + np.arange(len(prev_ranges)) * prev_ainc
+    def _compute_motion(self, prev_ranges, curr_ranges, prev_valid, curr_valid, angles, dt):
+        """Match laser beam returns using SVD Kabsch alignment."""
+        # Find beams that struck valid obstacles in both consecutive scans
+        common_valid = prev_valid & curr_valid
 
-        px = prev_ranges * np.cos(prev_angles)
-        py = prev_ranges * np.sin(prev_angles)
-        cx = curr_ranges * np.cos(curr_angles)
-        cy = curr_ranges * np.sin(curr_angles)
+        # Reject large radial jumps indicating dynamic obstacles or occlusion
+        dist_diff = np.abs(curr_ranges - prev_ranges)
+        consistent = common_valid & (dist_diff < 0.35)
+
+        num_matched = np.count_nonzero(consistent)
+        if num_matched < 15:
+            return 0.0, 0.0, 0.0
+
+        p_ranges = prev_ranges[consistent]
+        c_ranges = curr_ranges[consistent]
+        matched_angles = angles[consistent]
+
+        # Cartesian coordinates in sensor frame
+        px = p_ranges * np.cos(matched_angles)
+        py = p_ranges * np.sin(matched_angles)
+        cx = c_ranges * np.cos(matched_angles)
+        cy = c_ranges * np.sin(matched_angles)
 
         prev_pts = np.column_stack((px, py))
         curr_pts = np.column_stack((cx, cy))
 
-        prev_valid = np.isfinite(prev_ranges) & (prev_ranges > 0.01)
-        curr_valid = np.isfinite(curr_ranges) & (curr_ranges > 0.01)
-        if np.sum(prev_valid) < 10 or np.sum(curr_valid) < 10:
-            return 0.0, 0.0, 0.0
+        prev_centroid = np.mean(prev_pts, axis=0)
+        curr_centroid = np.mean(curr_pts, axis=0)
 
-        prev_centroid = np.mean(prev_pts[prev_valid], axis=0)
-        curr_centroid = np.mean(curr_pts[curr_valid], axis=0)
+        pv = prev_pts - prev_centroid
+        cv = curr_pts - curr_centroid
 
-        H = np.zeros((2, 2))
-        pv = prev_pts[prev_valid] - prev_centroid
-        cv = curr_pts[curr_valid] - curr_centroid
-        n = min(len(pv), len(cv))
-        H = pv[:n].T @ cv[:n]
+        # Cross-covariance matrix
+        H = pv.T @ cv
 
         U, _, Vt = np.linalg.svd(H)
         R = Vt.T @ U.T
@@ -110,11 +135,19 @@ class RF2oOdometryNode(Node):
             Vt[-1, :] *= -1
             R = Vt.T @ U.T
 
+        # Displacement from prev to curr
         translation = curr_centroid - R @ prev_centroid
+        yaw_disp = math.atan2(R[1, 0], R[0, 0])
 
-        vx = translation[0]
-        vy = translation[1]
-        vyaw = math.atan2(R[1, 0], R[0, 0])
+        # Velocities = displacement / dt
+        vx = float(translation[0] / dt)
+        vy = float(translation[1] / dt)
+        vyaw = float(yaw_disp / dt)
+
+        # Sanity velocity clamp for ground mobile robot
+        vx = max(-1.0, min(1.0, vx))
+        vy = max(-0.5, min(0.5, vy))
+        vyaw = max(-2.0, min(2.0, vyaw))
 
         return vx, vy, vyaw
 
@@ -130,6 +163,25 @@ class RF2oOdometryNode(Node):
             linear=Vector3(x=vx, y=vy, z=0.0), angular=Vector3(x=0.0, y=0.0, z=vyaw)
         )
 
+        # 6x6 covariance matrices (x, y, z, roll, pitch, yaw)
+        pose_cov = [0.0] * 36
+        pose_cov[0] = 0.02   # x
+        pose_cov[7] = 0.02   # y
+        pose_cov[14] = 1e6   # z
+        pose_cov[21] = 1e6   # roll
+        pose_cov[28] = 1e6   # pitch
+        pose_cov[35] = 0.05  # yaw
+        odom.pose.covariance = pose_cov
+
+        twist_cov = [0.0] * 36
+        twist_cov[0] = 0.02  # vx
+        twist_cov[7] = 0.02  # vy
+        twist_cov[14] = 1e6  # vz
+        twist_cov[21] = 1e6  # vroll
+        twist_cov[28] = 1e6  # vpitch
+        twist_cov[35] = 0.05 # vyaw
+        odom.twist.covariance = twist_cov
+
         self.odom_pub.publish(odom)
 
         if self.tf_broadcaster:
@@ -144,7 +196,7 @@ class RF2oOdometryNode(Node):
             self.tf_broadcaster.sendTransform(t)
 
     @staticmethod
-    def _yaw_to_quaternion(yaw):
+    def _yaw_to_quaternion(yaw: float) -> Quaternion:
         half = yaw * 0.5
         return Quaternion(x=0.0, y=0.0, z=math.sin(half), w=math.cos(half))
 
@@ -154,11 +206,12 @@ def main(args=None):
     node = RF2oOdometryNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

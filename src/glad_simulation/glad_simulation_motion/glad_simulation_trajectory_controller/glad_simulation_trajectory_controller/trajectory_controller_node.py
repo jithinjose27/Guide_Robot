@@ -44,9 +44,11 @@ class TrajectoryController(Node):
         diff = target - current
         if abs(diff) < 1e-6:
             return target
-        return current + max(max(-max_change, diff), -max_change)
+        return current + max(-max_change, min(max_change, diff))
 
     def update(self):
+        if not rclpy.ok():
+            return
         dt = 0.05
         age = (self.get_clock().now() - self.target_stamp).nanoseconds / 1e9
 
@@ -73,7 +75,10 @@ class TrajectoryController(Node):
         cmd.angular.z = self.ramp(self.current.angular.z, target_z, max_z)
 
         self.current = cmd
-        self.pub.publish(cmd)
+        try:
+            self.pub.publish(cmd)
+        except Exception:
+            pass
 
 
 def main(args=None):
@@ -81,12 +86,14 @@ def main(args=None):
     node = TrajectoryController()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
     main()
+

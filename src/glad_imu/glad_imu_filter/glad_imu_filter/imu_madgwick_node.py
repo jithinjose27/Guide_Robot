@@ -1,15 +1,25 @@
+#!/usr/bin/env python3
+"""
+Madgwick Orientation Filter for G.L.A.D IMU Pipeline.
+
+Fuses angular rates from gyroscope, gravity vector from accelerometer,
+and optional magnetic field from magnetometer using gradient descent on
+quaternions. Produces drift-compensated, noise-robust 3D orientation.
+"""
+
+import math
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, MagneticField
 from geometry_msgs.msg import Quaternion
-import math
-import numpy as np
 
 
 class MadgwickFilter:
     def __init__(self, beta=0.1):
         self.beta = beta
-        self.q = np.array([1.0, 0.0, 0.0, 0.0])
+        # Quaternion: [w, x, y, z]
+        self.q = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
 
     def update(self, gx, gy, gz, ax, ay, az, mx, my, mz, dt):
         q = self.q
@@ -22,7 +32,7 @@ class MadgwickFilter:
         ay /= a_norm
         az /= a_norm
 
-        q1, q2, q3, q4 = q
+        q1, q2, q3, q4 = q[0], q[1], q[2], q[3]
 
         # --- Accelerometer objective function f_g ---
         f_g1 = 2.0 * (q2 * q4 - q1 * q3) - ax
@@ -43,24 +53,23 @@ class MadgwickFilter:
         J_g33 = -4.0 * q3
         J_g34 = 0.0
 
-        # Combined f and J for accel-only
         step = np.array(
             [
                 J_g11 * f_g1 + J_g21 * f_g2 + J_g31 * f_g3,
                 J_g12 * f_g1 + J_g22 * f_g2 + J_g32 * f_g3,
                 J_g13 * f_g1 + J_g23 * f_g2 + J_g33 * f_g3,
                 J_g14 * f_g1 + J_g24 * f_g2 + J_g34 * f_g3,
-            ]
+            ],
+            dtype=np.float64,
         )
 
-        # --- Magnetometer (add to gradient if valid) ---
+        # --- Magnetometer incorporation ---
         m_norm = math.sqrt(mx * mx + my * my + mz * mz)
         if m_norm > 0.001:
             mx /= m_norm
             my /= m_norm
             mz /= m_norm
 
-            # Rotate mag to earth frame to get reference direction
             hx = (
                 2.0 * mx * (0.5 - q3 * q3 - q4 * q4)
                 + 2.0 * my * (q1 * q4 + q2 * q3)
@@ -78,7 +87,6 @@ class MadgwickFilter:
                 + 2.0 * mz * (0.5 - q2 * q2 - q3 * q3)
             )
 
-            # Magnetometer objective function f_b
             f_b1 = (
                 2.0 * bx * (0.5 - q3 * q3 - q4 * q4)
                 + 2.0 * bz * (q2 * q4 - q1 * q3)
@@ -91,7 +99,6 @@ class MadgwickFilter:
                 - mz
             )
 
-            # Magnetometer Jacobian J_b
             J_b11 = -2.0 * bz * q3
             J_b12 = 2.0 * bz * q4
             J_b13 = -4.0 * bx * q3 - 2.0 * bz * q1
@@ -121,7 +128,8 @@ class MadgwickFilter:
                 q1 * gx + q3 * gz - q4 * gy,
                 q1 * gy - q2 * gz + q4 * gx,
                 q1 * gz + q2 * gy - q3 * gx,
-            ]
+            ],
+            dtype=np.float64,
         )
 
         q_dot -= beta * step
@@ -146,8 +154,8 @@ class ImuMadgwickNode(Node):
         self.declare_parameter("world_frame", "enu")
         self.declare_parameter("fixed_frame", "odom")
 
-        beta = self.get_parameter("beta").value
-        self.use_mag = self.get_parameter("use_mag").value
+        beta = float(self.get_parameter("beta").value)
+        self.use_mag = bool(self.get_parameter("use_mag").value)
         self.world_frame = self.get_parameter("world_frame").value
         self.fixed_frame = self.get_parameter("fixed_frame").value
 
@@ -166,10 +174,10 @@ class ImuMadgwickNode(Node):
         self.last_time = None
 
         self.get_logger().info(
-            f"Madgwick filter started (beta={beta}, use_mag={self.use_mag})"
+            f"Madgwick orientation filter started (beta={beta}, use_mag={self.use_mag})"
         )
 
-    def imu_callback(self, msg):
+    def imu_callback(self, msg: Imu):
         current_time = self.get_clock().now()
 
         if self.last_time is None:
@@ -179,8 +187,10 @@ class ImuMadgwickNode(Node):
         dt = (current_time - self.last_time).nanoseconds / 1e9
         self.last_time = current_time
 
-        if dt <= 0 or dt > 0.1:
+        # Clamping dt prevents numeric explosion during system hiccups
+        if dt <= 0:
             return
+        dt = min(0.1, dt)
 
         gx = msg.angular_velocity.x
         gy = msg.angular_velocity.y
@@ -197,24 +207,18 @@ class ImuMadgwickNode(Node):
             mz = self.mag_data.magnetic_field.z
 
         self.filter.update(gx, gy, gz, ax, ay, az, mx, my, mz, dt)
-
         q = self.filter.get_quaternion()
 
         out = Imu()
         out.header.stamp = msg.header.stamp
-        out.header.frame_id = "imu_link"
+        out.header.frame_id = msg.header.frame_id or "imu_link"
 
-        out.orientation = Quaternion(x=q[1], y=q[2], z=q[3], w=q[0])
+        # q is [w, x, y, z] -> map to geometry_msgs Quaternion
+        out.orientation = Quaternion(x=float(q[1]), y=float(q[2]), z=float(q[3]), w=float(q[0]))
         out.orientation_covariance = [
-            0.01,
-            0.0,
-            0.0,
-            0.0,
-            0.01,
-            0.0,
-            0.0,
-            0.0,
-            0.01,
+            0.01, 0.0, 0.0,
+            0.0, 0.01, 0.0,
+            0.0, 0.0, 0.01,
         ]
 
         out.angular_velocity = msg.angular_velocity
@@ -225,7 +229,7 @@ class ImuMadgwickNode(Node):
 
         self.imu_pub.publish(out)
 
-    def mag_callback(self, msg):
+    def mag_callback(self, msg: MagneticField):
         self.mag_data = msg
 
 
@@ -234,10 +238,12 @@ def main(args=None):
     node = ImuMadgwickNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
-    node.destroy_node()
-    rclpy.shutdown()
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

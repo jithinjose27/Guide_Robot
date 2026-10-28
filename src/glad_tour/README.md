@@ -1,71 +1,105 @@
-# GLAD Tour
+# GLAD Tour (Autonomous AI Tour Guide) 🎓🤖
 
-Autonomous tour guide package for the G.L.A.D robot. Navigates a predefined set of waypoints and delivers AI-generated spoken commentary at each stop via Google Gemini and text-to-speech.
+Welcome to the **`glad_tour`** package! This is where robotics navigation and modern Generative AI meet.
 
-## Overview
+G.L.A.D acts as an autonomous docent: it navigates a sequence of designated laboratory stations, stops at each one, and delivers location-specific technical explanations to visitors using Google Gemini and Text-to-Speech (TTS).
 
-The robot follows a route through three lab locations, stopping at each to deliver a verbal introduction generated on the fly by a language model. The tour script uses `nav2_simple_commander` for navigation and `gTTS` (Google Text-to-Speech) for audio playback through a USB speaker.
+---
 
-## Tour Waypoints
-
-| Stop | Name | X (m) | Y (m) | Orientation (w) | Description |
-|------|------|-------|-------|-----------------|-------------|
-| 1 | Point 1 | 3.44 | 0.595 | 0.348 | Programming Lab — greet guests and describe the lab |
-| 2 | Point 2 | 3.17 | 3.66 | 0.221 | Robotics Lab — describe the lab and KUKA robot |
-| 3 | Point 3 | 3.60 | 0.452 | 0.119 | Automation Lab — explain pneumatic and hydraulic systems |
-
-Each waypoint has a custom prompt sent to Gemini. The LLM's 2–3 sentence response is spoken aloud via the USB speaker.
-
-## How It Works
-
-1. Initializes Gemini client (model `gemini-2.5-flash-lite`).
-2. Creates a `BasicNavigator` and sets the initial pose (0, 0).
-3. Waits for Nav2 to become active (`waitUntilNav2Active`).
-4. For each waypoint:
-   - Sends a `goToPose` navigation goal.
-   - Blocks until the task completes.
-   - On success: sends the waypoint's prompt to Gemini, generates speech via `gTTS`, and plays it through the USB speaker.
-   - On failure: speaks an apology and stops the tour.
-5. Shuts down after the last waypoint.
-
-## Audio Output
-
-- Automatically detects a USB audio device via `aplay -l` (looks for `YM USB Audio Device` or `USB Audio`).
-- Falls back to `default` ALSA device if no USB speaker is found.
-- Speech generated with `gTTS` (Google's cloud TTS, requires internet), saved to a temp MP3, and played with `mpg123`.
-
-## LLM Integration
-
-- **Model:** `gemini-2.5-flash-lite` (fast, low-cost)
-- **API key:** Read from `GEMINI_API_KEY` environment variable, with a hardcoded fallback (development only).
-- **System instruction:** Guides the model to respond as a helpful, professional tour guide robot named G.L.A.D. in 2–3 short sentences without markdown.
-- **Temperature:** 0.7 (balanced creativity/determinism).
-
-If the API key is missing or the call fails, the robot falls back to a canned apology message.
-
-## Launch
+## 🌟 How the Tour Works
 
 ```
-ros2 launch glad_tour glad_tour_launch.py
+                   1. Initialize Nav2 BasicNavigator
+                                │
+                                ▼
+                     2. Set Initial Pose (0, 0)
+                                │
+                                ▼
+             3. Wait for Nav2 to activate (Costmaps ready)
+                                │
+                                ▼
+       ┌──────────────► 4. Send Goal Pose (goToPose) ──────────────┐
+       │                                                           │
+       │                   5. Monitor Navigation                   │
+       │                      (non-blocking loop)                  │
+       │                               │                           │
+       │                               ▼                           │
+       │                    6. Arrived at Station!                 │
+       │                               │                           │
+       │                               ▼                           │
+       │             7. Generate AI Spoken Commentary              │
+       │             - Send prompt to Google Gemini 2.5 Flash      │
+       │             - Fallback to curated script if offline       │
+       │                               │                           │
+       │                               ▼                           │
+       │                 8. Speak aloud via USB Speaker            │
+       │                      (gTTS + mpg123/ffplay)               │
+       │                               │                           │
+       └───────────────────────────────┴───────────────────────────┘
 ```
 
-## Dependencies
+---
 
-- ROS 2 (`rclpy`, `launch_ros`)
-- `nav2_simple_commander`
-- `gTTS` (Python package)
-- `mpg123` (system package for MP3 playback)
-- `google-genai` (Python package for Gemini API)
+## 📍 Designated Tour Stations
 
-## Environment Setup
+| Stop | Location | Coordinates [X, Y, Yaw] | What G.L.A.D Explains |
+|---|---|---|---|
+| **Station 1** | **Programming Lab** | $x=3.44\text{ m}, y=0.595\text{ m}, \text{yaw}=1.21\text{ rad}$ | Introduces the robotics software engineering lab, algorithm design, and ROS 2 control systems. |
+| **Station 2** | **Robotics Lab** | $x=3.17\text{ m}, y=3.66\text{ m}, \text{yaw}=1.35\text{ rad}$ | Highlights the industrial 6-DOF KUKA manipulator, forward/inverse kinematics, and precision pick-and-place. |
+| **Station 3** | **Automation Lab** | $x=3.60\text{ m}, y=0.452\text{ m}, \text{yaw}=1.45\text{ rad}$ | Details industrial electro-pneumatic and hydraulic circuits, fluid dynamics, and automated sequential logic. |
 
-```bash
-export GEMINI_API_KEY="your_api_key_here"
+---
+
+## 💡 Generative AI with Offline Resilience
+
+To ensure that **anyone can run this project out of the box** without getting stuck on API keys or internet issues:
+- **Online with API Key:** If `GEMINI_API_KEY` is exported, G.L.A.D queries **`gemini-2.5-flash-lite`** on the fly. Gemini produces fresh, conversational responses tailored to the lab context.
+- **Offline / No Key:** If no API key is provided, G.L.A.D automatically falls back to built-in, professionally written technical commentaries for each station!
+
+---
+
+## 🛠️ How to Customize for Your Own Lab or School
+
+Want to create a tour of your own college or office? Just edit the `waypoints` array in `glad_tour.py`:
+
+```python
+waypoints = [
+    {
+        "name": "Library Entrance",
+        "x": 5.2,
+        "y": 1.4,
+        "z": 0.0,
+        "w": 1.0,
+        "prompt": "We have arrived at the central library. Welcome the visitors and describe the research archives."
+    },
+    ...
+]
 ```
 
-## Build
+### Tips for Finding Coordinates:
+1. Open RViz with your saved map.
+2. Use the **"Publish Point"** or **"2D Nav Goal"** tool.
+3. Look at the terminal echoing the clicked point or run:
+   ```bash
+   ros2 topic echo /clicked_point
+   ```
+
+---
+
+## 🚀 Building & Launching
 
 ```bash
 colcon build --packages-select glad_tour
 source install/setup.bash
 ```
+
+### Set Your Gemini API Key (Optional):
+```bash
+export GEMINI_API_KEY="AIzaSy..."
+```
+
+### Launch the Tour:
+```bash
+ros2 launch glad_tour glad_tour_launch.py
+```
+*(Or launch the complete system including sensors and Nav2 via `ros2 launch glad_final_tour glad_final_tour_launch.py`)*.

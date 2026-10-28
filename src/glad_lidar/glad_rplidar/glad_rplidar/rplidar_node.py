@@ -1,25 +1,32 @@
-import serial
-import struct
+#!/usr/bin/env python3
+"""
+RPLidar Serial Driver for G.L.A.D.
+
+Connects to Slamtec RPLidar (A1/A2 series) over UART serial, decodes
+standard 5-byte measurement packets, buffers a complete 360-degree rotation,
+and publishes compliant sensor_msgs/LaserScan messages.
+"""
+
 import math
-import time
+import struct
 import threading
+import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-
+import serial
 
 RPLIDAR_START_FLAG = 0xA5
-
-CMD_STOP = 0x25  # stop
-CMD_SCAN = 0x20  # request continuous scan
-CMD_FORCE_SCAN = 0x21  # force scan (skip motor/check)
-CMD_GET_INFO = 0x50  # device info
-CMD_GET_HEALTH = 0x52  # device health
-CMD_RESET = 0x40  # reset
+CMD_STOP = 0x25
+CMD_SCAN = 0x20
+CMD_FORCE_SCAN = 0x21
+CMD_GET_INFO = 0x50
+CMD_GET_HEALTH = 0x52
+CMD_RESET = 0x40
 
 DESCRIPTOR_LEN = 7
-NODE_LEN = 5  # bytes per measurement node
+NODE_LEN = 5
 
 STATUS_OK = 0
 STATUS_WARNING = 1
@@ -37,81 +44,83 @@ class RPLidarNode(Node):
         self.declare_parameter("angle_compensate", True)
         self.declare_parameter("scan_mode", "Sensitivity")
         self.declare_parameter("scan_topic", "/scan_unfiltered")
+        self.declare_parameter("num_samples", 360)
+        self.declare_parameter("min_range", 0.15)
+        self.declare_parameter("max_range", 12.0)
 
         port = self.get_parameter("serial_port").value
         baud = self.get_parameter("serial_baudrate").value
         self.frame_id = self.get_parameter("frame_id").value
         self.inverted = self.get_parameter("inverted").value
         scan_mode = self.get_parameter("scan_mode").value
+        scan_topic = self.get_parameter("scan_topic").value
+        self.num_samples = int(self.get_parameter("num_samples").value)
+        self.min_range = float(self.get_parameter("min_range").value)
+        self.max_range = float(self.get_parameter("max_range").value)
 
-        self.publisher = self.create_publisher(
-            LaserScan, self.get_parameter("scan_topic").value, 10
-        )
+        self.publisher = self.create_publisher(LaserScan, scan_topic, 10)
         self.serial = None
         self.running = False
         self.lock = threading.Lock()
 
         try:
-            # dsrdtr=False / rtscts=False prevent pyserial from auto-toggling
-            # control lines during open, which stops the RPLidar motor.
+            # DTR/RTS false prevents pyserial from toggling lines that halt RPLidar motor
             self.serial = serial.Serial(
                 port=port,
                 baudrate=baud,
-                timeout=0.1,
+                timeout=0.2,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
                 bytesize=serial.EIGHTBITS,
                 dsrdtr=False,
                 rtscts=False,
             )
-            self.get_logger().info(f"Opened {port} @ {baud}")
+            self.get_logger().info(f"Opened RPLidar serial connection on {port} @ {baud}")
         except Exception as e:
-            self.get_logger().error(f"Failed to open {port}: {e}")
+            self.get_logger().error(
+                f"Failed to open RPLidar port '{port}': {e}. "
+                "Check USB connection and dialout permissions (sudo usermod -a -G dialout $USER)."
+            )
             return
 
-        # Enable the motor. On the RPLidar A1 (and most SLAMTEC USB adapters)
-        # the motor-enable line is wired to the serial DTR/RTS lines.
-        # Deasserting DTR/RTS turns the motor on; asserting resets/stops it.
-        self.serial.dtr = False
-        self.serial.rts = False
+        # Start motor by de-asserting DTR
+        try:
+            self.serial.dtr = False
+            self.serial.rts = False
+        except Exception:
+            pass
+
+        time.sleep(0.1)
 
         if not self._get_device_info():
-            self.get_logger().error("Lidar not responding to GET_INFO")
-            self.destroy_node()
-            return
+            self.get_logger().warn("RPLidar GET_INFO unresponsive, proceeding with standard scan mode...")
 
-        if not self._get_device_health():
-            self.get_logger().error("Lidar not responding to GET_HEALTH")
-            self.destroy_node()
-            return
-
-        # scan_mode switching requires model-specific extended config commands
-        # (A2M8/A3 only). The A1 ignores this; send nothing to avoid a hang.
-        self.get_logger().info(f"scan_mode={scan_mode} (A1 uses standard scan)")
+        self.get_logger().info(f"RPLidar initialized (scan_mode={scan_mode}) -> publishing {scan_topic}")
 
         self.running = True
         self.scan_thread = threading.Thread(target=self._scan_loop, daemon=True)
         self.scan_thread.start()
 
-    # --- low-level serial helpers -------------------------------------------
-
-    def _send_cmd(self, cmd):
+    def _send_cmd(self, cmd: int):
         with self.lock:
-            self.serial.reset_input_buffer()
-            self.serial.write(bytes([RPLIDAR_START_FLAG, cmd]))
+            if self.serial and self.serial.is_open:
+                self.serial.reset_input_buffer()
+                self.serial.write(bytes([RPLIDAR_START_FLAG, cmd]))
 
-    def _read_exact(self, n):
+    def _read_exact(self, n: int) -> bytes:
         data = bytearray()
-        while len(data) < n:
-            chunk = self.serial.read(n - len(data))
-            if not chunk:
+        start = time.time()
+        while len(data) < n and self.running:
+            if not self.serial or not self.serial.is_open:
                 break
-            data.extend(chunk)
+            chunk = self.serial.read(n - len(data))
+            if chunk:
+                data.extend(chunk)
+            elif time.time() - start > 1.0:
+                break
         return bytes(data)
 
     def _read_descriptor(self):
-        # 7-byte descriptor: [0]=0xA5 [1]=mode [2:4]=len(LE)
-        # [4]=send_mode [5:7]=type(LE)
         d = self._read_exact(DESCRIPTOR_LEN)
         if len(d) < DESCRIPTOR_LEN or d[0] != RPLIDAR_START_FLAG:
             return None, None
@@ -119,130 +128,146 @@ class RPLidarNode(Node):
         resp_type = struct.unpack_from("<H", d, 5)[0]
         return resp_type, length
 
-    def _get_device_info(self):
-        self._send_cmd(CMD_GET_INFO)
-        resp_type, length = self._read_descriptor()
-        if resp_type is None:
-            return False
-        info = self._read_exact(20)
-        if len(info) == 20:
-            model = info[0]
-            firmware = info[2]
-            hardware = info[3]
-            serialno = "".join(f"{b:02X}" for b in info[4:20])
-            self.get_logger().info(
-                f"Lidar info: model={model} fw={firmware} hw={hardware} "
-                f"serial={serialno}"
-            )
-            return True
+    def _get_device_info(self) -> bool:
+        try:
+            self._send_cmd(CMD_GET_INFO)
+            resp_type, _ = self._read_descriptor()
+            if resp_type is None:
+                return False
+            info = self._read_exact(20)
+            if len(info) == 20:
+                model = info[0]
+                firmware = f"{info[2]}.{info[1]}"
+                hardware = info[3]
+                serialno = "".join(f"{b:02X}" for b in info[4:20])
+                self.get_logger().info(
+                    f"RPLidar Info: Model={model}, FW={firmware}, HW={hardware}, S/N={serialno}"
+                )
+                return True
+        except Exception as e:
+            self.get_logger().warn(f"GET_INFO failed: {e}")
         return False
-
-    def _get_device_health(self):
-        self._send_cmd(CMD_GET_HEALTH)
-        resp_type, length = self._read_descriptor()
-        if resp_type is None:
-            return False
-        health = self._read_exact(3)
-        if len(health) == 3:
-            status = health[0]
-            err = (health[2] << 8) | health[1]
-            names = {STATUS_OK: "OK", STATUS_WARNING: "WARNING", STATUS_ERROR: "ERROR"}
-            self.get_logger().info(
-                f"Lidar health: {names.get(status, 'UNKNOWN')} (err={err})"
-            )
-            return True
-        return False
-
-    # --- scanning -----------------------------------------------------------
-
-    def _parse_nodes(self, raw):
-        stamps, angles, ranges, qualities = [], [], [], []
-        ts_now = self.get_clock().now()
-
-        n = len(raw) // NODE_LEN
-        for i in range(n):
-            node = raw[i * NODE_LEN : (i + 1) * NODE_LEN]
-            if len(node) < NODE_LEN:
-                break
-            q_angle = struct.unpack_from("<H", node, 0)[0]
-            quality = (q_angle >> 9) & 0x3F
-            angle_raw = (q_angle & 0x1FF) / 64.0
-            dist_raw = struct.unpack_from("<H", node, 2)[0] / 4.0 / 1000.0
-            flag = node[4]
-
-            if dist_raw == 0.0 or flag & 0x01:  # skip dist=0, new scan flag
-                continue
-
-            angle = math.radians(angle_raw)
-            if self.inverted:
-                angle = 2 * math.pi - angle
-
-            stamps.append(ts_now)
-            angles.append(angle)
-            ranges.append(dist_raw)
-            qualities.append(quality)
-        return stamps, angles, ranges, qualities
 
     def _scan_loop(self):
         self._send_cmd(CMD_SCAN)
         time.sleep(0.1)
-        resp_type, length = self._read_descriptor()
+        resp_type, _ = self._read_descriptor()
         if resp_type is None:
-            self.get_logger().error("No scan response from lidar")
-            self.running = False
-            return
-        self.get_logger().info("RPLidar scan started")
+            self.get_logger().warn("RPLidar did not acknowledge CMD_SCAN descriptor, retrying...")
+
+        self.get_logger().info("RPLidar scan loop actively capturing measurements")
+
+        # Accumulator for one full 360-degree revolution
+        current_angles = []
+        current_ranges = []
+        current_qualities = []
+        scan_start_time = self.get_clock().now()
 
         while self.running and rclpy.ok():
-            raw = self._read_exact(NODE_LEN * 200)
-            if not raw:
-                continue
+            try:
+                # Read 5-byte measurement node
+                node = self._read_exact(NODE_LEN)
+                if len(node) < NODE_LEN:
+                    continue
 
-            stamps, angles, ranges, qualities = self._parse_nodes(raw)
-            if not ranges:
-                continue
+                b0, b1, b2, b3, b4 = node[0], node[1], node[2], node[3], node[4]
 
-            angles = np.array(angles, dtype=np.float32)
-            ranges = np.array(ranges, dtype=np.float32)
-            qualities = np.array(qualities, dtype=np.float32)
+                # Protocol verification:
+                # b0: sync bit (bit 0) and inverse sync bit (bit 1)
+                sync = b0 & 0x01
+                inv_sync = (b0 >> 1) & 0x01
+                quality = b0 >> 2
+                checkbit = b1 & 0x01
 
-            sort_idx = np.argsort(angles)
-            angles = angles[sort_idx]
-            ranges = ranges[sort_idx]
-            qualities = qualities[sort_idx]
+                # If checkbit != 1, serial stream is misaligned: resynchronize byte by byte
+                if checkbit != 1 or (sync == inv_sync):
+                    single_byte = self.serial.read(1)
+                    continue
 
-            angle_min = float(angles[0])
-            angle_max = float(angles[-1])
-            n = len(angles)
-            angle_inc = (angle_max - angle_min) / max(n - 1, 1)
+                # Valid node: decode angle and distance
+                angle_q6 = (b1 >> 1) | (b2 << 7)
+                angle_deg = angle_q6 / 64.0
+                dist_q2 = b3 | (b4 << 8)
+                dist_m = (dist_q2 / 4.0) / 1000.0
 
-            if self.inverted:
-                angle_min, angle_max = -angle_max, -angle_min
+                # Check if this node marks the start of a new 360-degree revolution
+                if sync == 1 and len(current_ranges) > 50:
+                    # Publish accumulated scan
+                    self._publish_scan(
+                        scan_start_time,
+                        current_angles,
+                        current_ranges,
+                        current_qualities,
+                    )
+                    # Reset buffers for new revolution
+                    current_angles = []
+                    current_ranges = []
+                    current_qualities = []
+                    scan_start_time = self.get_clock().now()
 
-            scan = LaserScan()
-            scan.header.stamp = stamps[0].to_msg()
-            scan.header.frame_id = self.frame_id
-            scan.angle_min = angle_min
-            scan.angle_max = angle_max
-            scan.angle_increment = angle_inc
-            scan.time_increment = 0.0
-            scan.scan_time = 0.1
-            scan.range_min = 0.15
-            scan.range_max = 12.0
-            scan.ranges = ranges.tolist()
-            scan.intensities = qualities.tolist()
+                if dist_m > 0.0:
+                    angle_rad = math.radians(angle_deg)
+                    # Normalize angle to [-pi, pi]
+                    angle_rad = math.atan2(math.sin(angle_rad), math.cos(angle_rad))
+                    if self.inverted:
+                        angle_rad = -angle_rad
 
-            self.publisher.publish(scan)
+                    current_angles.append(angle_rad)
+                    current_ranges.append(dist_m)
+                    current_qualities.append(float(quality))
+
+            except Exception as e:
+                if self.running:
+                    self.get_logger().warn(f"RPLidar read error: {e}")
+                time.sleep(0.01)
+
+    def _publish_scan(self, start_time, angles, ranges, qualities):
+        if not ranges:
+            return
+
+        # Uniform angular grid covering [-pi, pi]
+        angle_min = -math.pi
+        angle_max = math.pi
+        num_bins = self.num_samples
+        angle_inc = (angle_max - angle_min) / float(num_bins)
+
+        grid_ranges = [float("inf")] * num_bins
+        grid_intensities = [0.0] * num_bins
+
+        # Populate nearest bin
+        for ang, dist, qual in zip(angles, ranges, qualities):
+            if self.min_range <= dist <= self.max_range:
+                idx = int(round((ang - angle_min) / angle_inc))
+                if 0 <= idx < num_bins:
+                    # Keep closest obstacle in bin
+                    if dist < grid_ranges[idx]:
+                        grid_ranges[idx] = float(dist)
+                        grid_intensities[idx] = float(qual)
+
+        scan = LaserScan()
+        scan.header.stamp = start_time.to_msg()
+        scan.header.frame_id = self.frame_id
+        scan.angle_min = angle_min
+        scan.angle_max = angle_max
+        scan.angle_increment = angle_inc
+        scan.time_increment = 0.0
+        scan.scan_time = 0.1  # ~10 Hz rotation rate
+        scan.range_min = self.min_range
+        scan.range_max = self.max_range
+        scan.ranges = grid_ranges
+        scan.intensities = grid_intensities
+
+        self.publisher.publish(scan)
 
     def destroy_node(self):
         self.running = False
         thread = getattr(self, "scan_thread", None)
         if thread and thread.is_alive():
-            thread.join(timeout=2.0)
+            thread.join(timeout=1.0)
         if self.serial and self.serial.is_open:
             try:
                 self._send_cmd(CMD_STOP)
-                time.sleep(0.1)
+                time.sleep(0.05)
                 self.serial.close()
             except Exception:
                 pass
@@ -254,11 +279,12 @@ def main(args=None):
     node = RPLidarNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

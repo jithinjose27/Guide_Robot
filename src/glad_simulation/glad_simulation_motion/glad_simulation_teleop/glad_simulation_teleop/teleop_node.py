@@ -254,40 +254,58 @@ time_time = __import__("time").time
 
 
 def main():
-    os.dup2(os.open(LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644), 2)
+    try:
+        os.dup2(os.open(LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644), 2)
+    except Exception:
+        pass
 
     rclpy.init(args=sys.argv)
     node = TeleopKeyboard()
 
-    stdscr = curses.initscr()
-    curses.start_color()
-    setup_colors()
-    curses.cbreak()
-    stdscr.keypad(True)
-    curses.curs_set(0)
-    stdscr.nodelay(True)
+    stdscr = None
+    try:
+        stdscr = curses.initscr()
+        curses.start_color()
+        setup_colors()
+        curses.cbreak()
+        stdscr.keypad(True)
+        curses.curs_set(0)
+        stdscr.nodelay(True)
+    except Exception as e:
+        node.get_logger().warn(
+            f"Terminal curses initialization skipped ({e}). "
+            "GLAD simulation teleop running in headless background mode."
+        )
 
     try:
         while node.running and rclpy.ok():
-            ch = stdscr.getch()
-            if ch != -1:
-                node.on_key(ch)
+            if stdscr:
+                try:
+                    ch = stdscr.getch()
+                    if ch != -1:
+                        node.on_key(ch)
+                    draw_ui(stdscr, node)
+                except Exception:
+                    pass
 
-            rclpy.spin_once(node, timeout_sec=0)
-
+            rclpy.spin_once(node, timeout_sec=0.01)
             node.update()
-
-            draw_ui(stdscr, node)
-
             __import__("time").sleep(0.01)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
-        node.pub_cmd.publish(Twist())
-        node.pub_stop.publish(Bool(data=False))
+        try:
+            node.pub_cmd.publish(Twist())
+            node.pub_stop.publish(Bool(data=False))
+        except Exception:
+            pass
         node.destroy_node()
-        curses.curs_set(1)
-        curses.endwin()
+        if stdscr:
+            try:
+                curses.curs_set(1)
+                curses.endwin()
+            except Exception:
+                pass
         if rclpy.ok():
             rclpy.shutdown()
         print(f"GLAD Teleop stopped. Log: {LOG_FILE}")
@@ -295,3 +313,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

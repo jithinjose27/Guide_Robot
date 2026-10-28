@@ -3,18 +3,20 @@
 <package format="3">
   <name>glad_simulation_urdf</name>
   <version>0.0.0</version>
-  <description>G.L.A.D. Simulation URDF Package</description>
+  <description>G.L.A.D. Simulation URDF Package for ROS 2 Jazzy and Gazebo Sim Harmonic</description>
   <maintainer email="jithin27j@gmail.com">root</maintainer>
-  <license>Apache 2.0</license>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
-  <exec_depend>gazebo_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>xacro</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>ros_gz_interfaces</exec_depend>
+  <exec_depend>ros_gz_sim</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

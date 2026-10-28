@@ -1,116 +1,115 @@
-# GLAD IMU
+# GLAD IMU 🧭
 
-ROS 2 packages for BNO055 IMU data acquisition and Madgwick orientation filtering.
+Welcome to the **`glad_imu`** package! An Inertial Measurement Unit (IMU) is the inner ear of the robot — it gives G.L.A.D an intuitive sense of balance, orientation, and angular turning speed even in pitch darkness or wheel-slip conditions.
 
-## Packages
+---
 
-### `glad_imu_publisher` — Hardware Driver
+## 🔬 How Inertial Navigation Works
 
-Reads raw data from an **Adafruit BNO055** IMU over I2C and publishes it as ROS 2 topics.
+The G.L.A.D robot uses an **Adafruit BNO055 9-DOF** (Degrees of Freedom) sensor connected via $I^2C$. It contains:
+1. **3-Axis Gyroscope:** Measures instantaneous rotational velocity ($\omega_x, \omega_y, \omega_z$ in $\text{rad/s}$). Excellent for fast movements, but drifts over time.
+2. **3-Axis Accelerometer:** Measures linear acceleration ($a_x, a_y, a_z$ in $\text{m/s}^2$) including gravity ($9.81\text{ m/s}^2$). When the robot is standing still or moving at constant speed, gravity points straight down, giving an absolute reference for roll and pitch.
+3. **3-Axis Magnetometer:** Senses the Earth's ambient magnetic field vector ($\mu\text{T}$) to provide an absolute magnetic heading (yaw).
 
-**Topics published:**
-
-| Topic | Type | Rate | Description |
-|-------|------|------|-------------|
-| `/imu/data_raw` | `sensor_msgs/Imu` | 50 Hz | Raw gyroscope (rad/s) and linear acceleration (m/s²). Orientation covariance first element set to `-1.0` (orientation not provided). |
-| `/imu/mag` | `sensor_msgs/MagneticField` | 50 Hz | Calibrated magnetometer field vector (Tesla). |
-
-**Calibration:**
-
-Per-device offsets and deadzones are loaded from `config/bno055_config.yaml`:
-
-- `gyro_offsets` — Static bias subtracted from raw gyro readings per axis.
-- `mag_offsets` — Static bias subtracted from raw magnetometer readings.
-- `deadzones.accel` / `deadzones.gyro` — Threshold below which readings are zeroed (noise gate).
-
-Axis sign corrections are applied inline in code (Y/Z gyro negation, X accel negation, Y/Z mag negation) to match the desired convention.
-
-**Executable:** `imupub`
-
+### The Sensor Pipeline:
 ```
-ros2 run glad_imu_publisher imupub
+┌──────────────────────────────────────────────┐
+│           Adafruit BNO055 Hardware           │
+└──────────────────────┬───────────────────────┘
+                       │ I2C Bus (SCL / SDA)
+                       ▼
+┌──────────────────────────────────────────────┐
+│        Package 1: glad_imu_publisher         │
+│  - Reads raw gyro, accel, mag                │
+│  - Applies calibration bias & noise gate     │
+└──────────────┬───────────────────────────────┘
+               │ /imu/data_raw & /imu/mag
+               ▼
+┌──────────────────────────────────────────────┐
+│         Package 2: glad_imu_filter           │
+│  - Madgwick Gradient-Descent Filter          │
+│  - Fuses gyro integration with gravity & mag │
+└──────────────┬───────────────────────────────┘
+               │ /imu/data (Fused Orientation Quaternion)
+               ▼
+      glad_sensor_filter (EKF)
 ```
 
 ---
 
-### `glad_imu_filter` — Madgwick Orientation Filter
+## 🧮 The Madgwick Filter Algorithm
 
-Subscribes to raw IMU and magnetometer data and publishes fused orientation.
+Why not just integrate gyroscope readings over time ($\theta_{new} = \theta_{old} + \omega \cdot dt$)?
+Because tiny sensor biases accumulate every millisecond, causing the robot to believe it is spinning even while stationary!
 
-**Topics subscribed:**
+The **Madgwick AHRS (Attitude and Heading Reference System)** algorithm combines:
+- **Fast Gyroscope Integration:** Provides low-latency, dynamic tracking of rapid rotations.
+- **Gradient Descent Correction ($\beta$ gain):** Slowly nudges the orientation quaternion towards the gravity vector (from accelerometer) and magnetic north (from magnetometer).
 
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/imu/data_raw` | `sensor_msgs/Imu` | Raw gyroscope + accelerometer |
-| `/imu/mag` | `sensor_msgs/MagneticField` | Magnetometer field (optional) |
+The filter gain $\beta$ balances responsiveness against noise:
+- A higher $\beta$ corrects gyro drift faster, but allows mechanical vibrations to jitter the orientation.
+- A lower $\beta$ (e.g. $0.05 - 0.1$) gives buttery-smooth heading tracking for mobile robots.
 
-**Topic published:**
+---
 
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/imu/data` | `sensor_msgs/Imu` | Fused IMU with orientation (quaternion) filled in |
+## 📦 Packages Overview
 
-**Parameters** (loaded from `config/madgwick_params.yaml`):
+### 1. `glad_imu_publisher`
+- **Driver:** Pure Python driver interfacing with the BNO055.
+- **Config:** `config/bno055_config.yaml` stores zero-rate gyro offsets and noise deadzones.
+- **Topics Published:**
+  - `/imu/data_raw` (`sensor_msgs/Imu`): Raw acceleration and angular velocity.
+  - `/imu/mag` (`sensor_msgs/MagneticField`): Calibrated magnetic field vector in Tesla.
+- **Run standalone:**
+  ```bash
+  ros2 run glad_imu_publisher imupub
+  ```
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `beta` | `0.1` | Madgwick filter gain. Higher values trust the gyroscope more; lower values blend in more accelerometer/magnetometer correction. |
-| `use_mag` | `true` | Whether to incorporate magnetometer data into the filter. |
-| `world_frame` | `"enu"` | World frame convention (East-North-Up). |
-| `fixed_frame` | `"odom"` | Fixed reference frame name. |
+### 2. `glad_imu_filter`
+- **Filter:** Pure Python implementation of the Madgwick filter.
+- **Parameters (`config/madgwick_params.yaml`):**
+  - `beta`: Filter correction rate (default: `0.1`).
+  - `use_mag`: Incorporate magnetometer (default: `true`).
+  - `world_frame`: `"enu"` (East-North-Up coordinate convention).
+- **Topic Published:**
+  - `/imu/data` (`sensor_msgs/Imu`): Complete IMU message with fused `orientation` quaternion $(x, y, z, w)$ and covariance.
+- **Run standalone:**
+  ```bash
+  ros2 run glad_imu_filter imu_madgwick
+  ```
 
-The filter is a pure-Python implementation of the Madgwick algorithm, which uses gradient descent to compute the optimal quaternion orientation from gyroscope, accelerometer, and optional magnetometer measurements.
+---
 
-**Executable:** `imu_madgwick`
+## 🔌 Wiring & Hardware Setup (Raspberry Pi)
 
+| BNO055 Pin | Raspberry Pi Pin | Function |
+|---|---|---|
+| **VIN** | Pin 1 (3.3V) | Power |
+| **GND** | Pin 6 (GND) | Ground |
+| **SCL** | Pin 5 (GPIO 3 / SCL1) | $I^2C$ Clock |
+| **SDA** | Pin 3 (GPIO 2 / SDA1) | $I^2C$ Data |
+
+### Enable I2C on Ubuntu / Raspberry Pi:
+```bash
+sudo raspi-config
+# Navigate to: 3 Interface Options -> I4 I2C -> Enable -> Yes
 ```
-ros2 run glad_imu_filter imu_madgwick
+Verify the device is detected on address `0x28` or `0x29`:
+```bash
+sudo apt install i2c-tools
+i2cdetect -y 1
 ```
 
 ---
 
-## Data Flow
-
-```
-BNO055 (I2C)
-  │
-  ▼
-glad_imu_publisher  ──►  /imu/data_raw  ──►  glad_imu_filter  ──►  /imu/data
-  │                      (sensor_msgs/Imu)      (Madgwick)        (fused orientation)
-  └──►  /imu/mag
-        (sensor_msgs/MagneticField)
-```
-
-The publisher reads the sensor at 50 Hz, applies calibration offsets, deadzone filtering, and axis sign corrections, then publishes raw data. The filter subscribes to both topics, runs the Madgwick algorithm on each sample, and publishes an `Imu` message with the fused orientation quaternion.
-
-## Launch Files
-
-### Combined launch (both nodes)
-
-```
-ros2 launch glad_imu_publisher imu_publisher_launch.py
-```
-
-Single launch file that starts both the BNO055 driver and the Madgwick filter together with the correct topic remappings.
-
-### Individual launch
-
-```
-ros2 launch glad_imu_filter imu_madgwick_launch.py
-```
-
-Starts only the filter node (useful when running the publisher separately or using recorded data).
-
-## Dependencies
-
-- ROS 2 (rclpy)
-- `sensor_msgs`, `geometry_msgs`
-- `adafruit-bno055` (I2C driver for the BNO055 sensor)
-- `numpy`
-
-## Build
+## 🚀 Building & Launching
 
 ```bash
 colcon build --packages-select glad_imu_publisher glad_imu_filter
 source install/setup.bash
+```
+
+Launch both driver and filter together:
+```bash
+ros2 launch glad_imu_publisher imu_publisher_launch.py
 ```

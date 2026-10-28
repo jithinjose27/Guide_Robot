@@ -9,7 +9,15 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <exec_depend>glad_simulation_urdf</exec_depend>
+  <exec_depend>glad_simulation_teleop</exec_depend>
+  <exec_depend>glad_simulation_sensor_filter</exec_depend>
+  <exec_depend>glad_simulation_mapping</exec_depend>
+  <exec_depend>glad_simulation_navigation</exec_depend>
+  <exec_depend>glad_maps</exec_depend>
+
   <test_depend>ament_lint_auto</test_depend>
+
   <test_depend>ament_lint_common</test_depend>
 
   <export>

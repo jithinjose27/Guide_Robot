@@ -1,88 +1,86 @@
-# GLAD Voice
+# GLAD Voice (Conversational AI Assistant) 🎙️
 
-Voice-activated AI assistant for the G.L.A.D robot. Listens for a wake word, streams questions to Google Gemini, and responds aloud via realistic Edge TTS.
+Welcome to the **`glad_voice`** package! While navigation allows G.L.A.D to move around, the voice assistant gives the robot its personality and ability to engage in natural, interactive spoken Q&A with visitors and students.
 
-## Overview
+---
 
-Runs a ROS 2 node that manages a wake/sleep voice loop:
-
-1. Standby mode — listens for a wake word (`"hey glad"`, `"hello robo"`, etc.).
-2. Active mode — captures speech, sends it to Gemini (`gemini-2.5-flash-lite`), and speaks the streamed response.
-3. Sleep mode — triggered by `"thank you"`, `"go to sleep"`, `"bye"`, etc.
-4. Shutdown — `"shut down system"` exits the node.
-
-## Configuration
-
-### Hardware Auto-Detection
-
-On startup, the node scans:
-
-- **Microphone** — enumerates `speech_recognition` microphone names for `"YM USB Audio Device"` or `"USB Audio"`.
-- **Speaker** — runs `aplay -l` to find the USB audio card and builds a `plughw:N,0` ALSA device string.
-
-Falls back to `device_index=None` (default mic) and `"default"` speaker if no USB device is found.
-
-### Wake / Sleep Words
-
-| Mode | Trigger words |
-|------|--------------|
-| Wake | `"hello robo"`, `"hi robo"`, `"hey robo"`, `"hello glad"`, `"hey glad"`, `"hi glad"`, `"hello dad"`, `"hey dad"`, `"hey lad"`, `"hi lad"` |
-| Sleep | `"thank you"`, `"thanks"`, `"stop glad"`, `"go to sleep"`, `"thank you robo"`, `"bye"`, `"thanks robo"`, `"quiet"` |
-| Shutdown | `"shut down system"` |
-
-### Microphone Sensitivity
-
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| `dynamic_energy_threshold` | `False` | Fixed threshold (no auto-adjustment) |
-| `energy_threshold` | `1000` | Minimum volume to trigger (higher = less self-triggering) |
-| `pause_threshold` | `1.0` | Seconds of silence before end of phrase |
-| `timeout` | `7s` | Wait for speech before giving up |
-| `phrase_time_limit` | `15s` | Maximum recording length |
-
-### Gemini Model
-
-| Parameter | Value |
-|-----------|-------|
-| Model | `gemini-2.5-flash-lite` |
-| API key | `GEMINI_API_KEY` env var (fallback hardcoded key for development) |
-| System instruction | Respond as "GLAD", a helpful robotics assistant, in 2–3 short conversational sentences without markdown |
-
-Response streaming is used for low-latency output — sentences are yielded to the TTS engine as soon as they are punctuated.
-
-## Audio Pipeline
-
-1. **STT** — Google Speech Recognition via `speech_recognition` (requires internet).
-2. **LLM** — Google Gemini AI with streaming response.
-3. **TTS** — Microsoft Edge TTS (`edge-tts` CLI with `en-US-AriaNeural` voice) → temp MP3 → `mpg123` plays through USB speaker.
-
-The temp MP3 is deleted immediately after playback to avoid blocking the microphone for the next cycle.
-
-## Launch
+## 🗣️ How Voice Interaction Works
 
 ```
-ros2 run glad_voice voice_assistant
+           Microphone Audio (USB Sound Card)
+                         │
+                         ▼
+┌────────────────────────────────────────────────────────┐
+│                   1. Wake Word Filter                  │
+│       Listens for: "hey glad", "hello robo", etc.      │
+└────────────────────────┬───────────────────────────────┘
+                         │ (Detected!)
+                         ▼
+┌────────────────────────────────────────────────────────┐
+│             2. Speech Recognition (STT)                │
+│    Converts visitor voice audio into clean text prompt │
+└────────────────────────┬───────────────────────────────┘
+                         │ User Query Text
+                         ▼
+┌────────────────────────────────────────────────────────┐
+│         3. Generative AI Reasoning (LLM)               │
+│   - Streams prompt to Google Gemini 2.5 Flash          │
+│   - Answers dynamically in 2-3 concise sentences       │
+│   - (Local script fallback if offline / no API key)    │
+└────────────────────────┬───────────────────────────────┘
+                         │ Streaming Sentences
+                         ▼
+┌────────────────────────────────────────────────────────┐
+│             4. Text-to-Speech (TTS) Engine             │
+│   - Microsoft Edge TTS (en-US-AriaNeural) or gTTS      │
+│   - Plays through USB speaker via mpg123 / ffplay      │
+└────────────────────────────────────────────────────────┘
 ```
 
-No launch file is provided — run directly.
+---
 
-## Dependencies
+## 🎯 State Machine: Standby vs. Active
 
-- ROS 2 (`rclpy`)
-- `SpeechRecognition` (Python package)
-- `google-genai` (Python package)
-- `edge-tts` (Python package / CLI)
-- `mpg123` (system package)
+1. **Standby Mode (Sleep):**
+   - The robot keeps its mouth shut to prevent echoes and ignores casual ambient chatter.
+   - It only wakes up when someone addresses it directly with a wake word:
+     - `"hey glad"`, `"hello robo"`, `"hi glad"`, `"hey robo"`
+2. **Active Mode (Awake):**
+   - Responds: *"I am listening. How can I help you?"*
+   - Listens for a question, strips the wake prefix, queries Gemini AI, and speaks the answer.
+3. **Return to Standby:**
+   - Say: `"thank you"`, `"thanks"`, `"go to sleep"`, or `"bye"`.
+   - The robot replies politely and returns to standby.
 
-## Environment
+---
 
+## 🛠️ Hardware Requirements & Software Setup
+
+### Required Hardware:
+- Any standard USB Audio Dongle or USB Speakerphone with built-in microphone and 3.5mm/speaker output.
+
+### Python Packages:
 ```bash
-export GEMINI_API_KEY="your_api_key_here"
+pip install SpeechRecognition google-genai edge-tts gTTS
+sudo apt install mpg123 portaudio19-dev python3-pyaudio
 ```
 
-## Build
+### Environment Variable (Optional):
+```bash
+export GEMINI_API_KEY="AIzaSy..."
+```
+*(If no API key is exported, G.L.A.D still talks using local laboratory knowledge scripts!)*
+
+---
+
+## 🚀 Building & Launching
 
 ```bash
 colcon build --packages-select glad_voice
 source install/setup.bash
+```
+
+Run the voice assistant:
+```bash
+ros2 run glad_voice voice_assistant
 ```

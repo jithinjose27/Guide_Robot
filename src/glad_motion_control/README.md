@@ -1,213 +1,117 @@
-# GLAD Motion Control
+# GLAD Motion Control 🚀
 
-ROS 2 motion control pipeline: keyboard teleop → twist multiplexer → trajectory smoothing → motor driver with odometry.
+Welcome to the **`glad_motion_control`** pipeline! This is the motor execution and drive system of G.L.A.D. It turns high-level desires ("drive to coordinates $(3.5, 2.0)$" or "turn left") into physical wheel rotations on the ground.
 
-## Packages
+---
 
-### `glad_teleop` — Keyboard Teleoperation
+## 🏎️ The Motion Control Pipeline
 
-Terminal-based keyboard teleop node. Reads single keypresses and publishes velocity commands.
+Safety and smoothness are paramount when controlling physical robots. If you send raw, abrupt step changes in velocity directly to DC motors, wheels slip, gears strip, and the robot jerks violently!
 
-**Topics published:**
-
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/cmd_vel/teleop` | `geometry_msgs/Twist` | Linear/angular velocity from key input |
-| `/cmd_vel/stop` | `std_msgs/Bool` | Emergency stop toggle status |
-
-**Controls:**
-
-| Key | Action |
-|-----|--------|
-| `W` | Forward (linear +x) |
-| `X` | Reverse (linear −x) |
-| `A` | Rotate left (angular +z) |
-| `D` | Rotate right (angular −z) |
-| `S` | Stop (zero velocity) |
-| `Space` | Toggle emergency stop |
-| `Q` | Quit |
-
-**Parameters** (`config/teleop.yaml`):
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `linear_speed` | `0.1` | Forward/backward speed (m/s) |
-| `angular_speed` | `0.2` | Rotation speed (rad/s) |
-
-**Executable:** `teleop_node`
+The G.L.A.D motion pipeline solves this with a 4-stage layered architecture:
 
 ```
-ros2 run glad_teleop teleop_node
+┌────────────────────────┐      ┌────────────────────────┐      ┌────────────────────────┐
+│      Teleop Keyboard   │      │     Nav2 Navigation    │      │     Emergency Stop     │
+│   (/cmd_vel/teleop)    │      │     (/cmd_vel/nav)     │      │    (/cmd_vel/stop)     │
+└───────────┬────────────┘      └───────────┬────────────┘      └───────────┬────────────┘
+            │                               │                               │
+            └───────────────────────┐       │       ┌───────────────────────┘
+                                    ▼       ▼       ▼
+                        ┌───────────────────────────────────────┐
+                        │        Stage 1: glad_twist_mux        │
+                        │  - Priority multiplexer               │
+                        │  - Estop(100) > Teleop(70) > Nav(40)  │
+                        └───────────────────┬───────────────────┘
+                                            │ /cmd_vel/raw
+                                            ▼
+                        ┌───────────────────────────────────────┐
+                        │   Stage 2: glad_trajectory_controller │
+                        │  - Slew-rate acceleration limiter     │
+                        │  - Smooth ramping (accel / decel)     │
+                        └───────────────────┬───────────────────┘
+                                            │ /cmd_vel
+                                            ▼
+                        ┌───────────────────────────────────────┐
+                        │     Stage 3: glad_motor_controller    │
+                        │  - Differential drive kinematics      │
+                        │  - RPM to PWM (-255 to 255)           │
+                        └───────────────────┬───────────────────┘
+                                            │ UART Serial (PWM_L, PWM_R\n)
+                                            ▼
+                        ┌───────────────────────────────────────┐
+                        │       Stage 4: ESP32 Hardware         │
+                        │  - Dual H-Bridge motor drivers        │
+                        │  - Optical wheel encoders             │
+                        └───────────────────┬───────────────────┘
+                                            │ UART Serial (TICKS_L, TICKS_R\n)
+                                            ▼
+                        ┌───────────────────────────────────────┐
+                        │      Encoder Odometry Publisher       │
+                        │  - Delta ticks -> distance traveled   │
+                        │  - Publishes /motor/odom              │
+                        └───────────────────────────────────────┘
 ```
 
 ---
 
-### `glad_twist_mux` — Priority-Based Twist Multiplexer
+## 📦 Subpackages Detailed
 
-Merges multiple Twist sources based on priority. The highest-priority source with a recent message wins.
+### 1. `glad_twist_mux` — Priority Multiplexer
+- **Role:** Mediates between human operators and autonomous navigation.
+- **Priority Hierarchy:**
+  1. **Emergency Stop (`/cmd_vel/stop`, priority 100):** Immediately locks output velocity to 0 when toggled by spacebar or safety node.
+  2. **Keyboard Teleop (`/cmd_vel/teleop`, priority 70):** Whenever a human presses a key, teleop instantly takes control over autonomous navigation.
+  3. **Nav2 Autonomy (`/cmd_vel/nav`, priority 40):** Autonomous path following runs when teleop is idle.
+- **Safety Timeout:** If no message is received on an active channel within `0.5s`, it falls through to lower priorities.
 
-**Topics subscribed:**
+### 2. `glad_trajectory_controller` — Slew-Rate Limiter
+- **Role:** Eliminates sudden acceleration spikes.
+- **Math Behind Ramping:**
+  $$\Delta v = \text{clamp}(v_{\text{target}} - v_{\text{current}}, -a_{\text{max}} \cdot dt, +a_{\text{max}} \cdot dt)$$
+  Uses $a_{\text{linear}} = 0.2\text{ m/s}^2$ for smooth takeoff, and $d_{\text{linear}} = 0.4\text{ m/s}^2$ for responsive stopping.
 
-| Topic | Type | Priority | Source |
-|-------|------|----------|--------|
-| `/cmd_vel/stop` | `std_msgs/Bool` | 100 | Emergency stop (highest) |
-| `/cmd_vel/teleop` | `geometry_msgs/Twist` | 70 | Keyboard teleop |
-| `/cmd_vel/nav` | `geometry_msgs/Twist` | 40 | Nav2 autonomy |
+### 3. `glad_motor_controller` — ESP32 Differential Drive Bridge
+- **Role:** Communicates with the low-level microcontroller over serial.
+- **Kinematic Formulas:**
+  - Forward velocity $v_x$ ($\text{m/s}$) and angular rate $\omega_z$ ($\text{rad/s}$) map to wheel velocities:
+    $$v_{\text{right}} = v_x + \frac{\omega_z \cdot L}{2}, \quad v_{\text{left}} = v_x - \frac{\omega_z \cdot L}{2}$$
+    *(where $L = 0.325\text{ m}$ is the wheel separation distance)*.
+  - Encoder Odometry Integration:
+    $$d_{\text{center}} = \frac{d_{\text{right}} + d_{\text{left}}}{2}, \quad \Delta\theta = \frac{d_{\text{right}} - d_{\text{left}}}{L}$$
+    $$x_{k+1} = x_k + d_{\text{center}} \cos\theta, \quad y_{k+1} = y_k + d_{\text{center}} \sin\theta$$
+- **Topic Published:** `/motor/odom` (`nav_msgs/Odometry`).
 
-**Topic published:**
-
-| Topic | Type |
-|-------|------|
-| `/cmd_vel/raw` | `geometry_msgs/Twist` |
-
-If `stop` is active, a zero Twist is locked regardless of other sources. Each source has a timeout; if no message arrives within `timeout` seconds the mux falls through to the next priority. If all sources are stale, a zero Twist is published.
-
-**Parameters** (`config/twist_mux.yaml`):
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `timeout` | `0.5` | Source timeout (s) |
-| `priority_stop` | `100` | Emergency stop priority |
-| `priority_teleop` | `70` | Teleop priority |
-| `priority_nav` | `40` | Nav2 priority |
-
-**Executable:** `twist_mux_node`
-
-```
-ros2 run glad_twist_mux twist_mux_node
-```
-
----
-
-### `glad_trajectory_controller` — Slew-Rate Limiter
-
-Applies acceleration and deceleration ramps to smooth velocity commands before they reach the motor driver.
-
-**Topics:**
-
-| Topic | Direction | Type |
-|-------|-----------|------|
-| `/cmd_vel/raw` | Subscribed | `geometry_msgs/Twist` |
-| `/cmd_vel` | Published | `geometry_msgs/Twist` |
-
-The node ramps linear and angular velocities independently. When the target magnitude is smaller than the current output, the deceleration rate is used (softer stop); otherwise the acceleration rate is used. If no command arrives within `timeout` seconds, velocity ramps back to zero.
-
-**Parameters** (`config/trajectory_controller.yaml`):
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `timeout` | `0.5` | Command timeout before ramping to zero (s) |
-| `accel_linear` | `0.2` | Linear acceleration limit (m/s²) |
-| `decel_linear` | `0.4` | Linear deceleration limit (m/s²) |
-| `accel_angular` | `0.4` | Angular acceleration limit (rad/s²) |
-| `decel_angular` | `0.8` | Angular deceleration limit (rad/s²) |
-
-**Executable:** `trajectory_controller_node`
-
-```
-ros2 run glad_trajectory_controller trajectory_controller_node
-```
+### 4. `glad_teleop` — Interactive Keyboard Control
+- **Controls:**
+  ```
+         Q=↖  W=↑  E=↗
+         A=←  S=■  D=→
+              X=↓
+  ```
+  - `W` / `X`: Forward / Reverse
+  - `A` / `D`: Pivot Left / Pivot Right
+  - `Q` / `E`: Curve Forward Left / Curve Forward Right
+  - `S`: Instant Stop
+  - `Spacebar`: Toggle Emergency Stop (E-Stop)
+  - `+` / `-`: Increase / Decrease linear speed
+  - `[` / `]`: Increase / Decrease angular speed
 
 ---
 
-### `glad_motor_controller` — ESP32 Differential Drive Bridge
-
-Serial bridge to an ESP32 motor controller. Handles inverse kinematics, PWM mapping, encoder-based odometry, and TF.
-
-**Serial protocol:**
-
-| Direction | Format | Description |
-|-----------|--------|-------------|
-| TX → ESP32 | `PWM_RIGHT,PWM_LEFT\n` | Motor PWM commands (−255 to 255) |
-| RX ← ESP32 | `TICKS_LEFT,TICKS_RIGHT\n` | Encoder tick counts |
-
-**Topics:**
-
-| Topic | Direction | Type | Description |
-|-------|-----------|------|-------------|
-| `cmd_vel` | Subscribed | `geometry_msgs/Twist` | Velocity commands |
-| `odom` | Published | `nav_msgs/Odometry` | Wheel odometry (pose + twist with covariance) |
-
-**Pipeline:**
-
-1. Receives `Twist` on `cmd_vel`.
-2. Differential-drive inverse kinematics → left/right wheel velocities (m/s).
-3. Wheel velocities → RPM → PWM (−255 to 255) via linear mapping.
-4. Sends `PWM_R,PWM_L\n` over serial to ESP32.
-5. Background thread reads `TICKS_L,TICKS_R\n` from serial at ~200 Hz.
-6. On a 20 Hz timer: delta ticks → distance (m) → pose update (x, y, θ) → publish `Odometry`.
-
-**Parameters** (`config/motor_controller_params.yaml`):
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `serial_port` | `/dev/ttyUSB1` | Serial device to ESP32 |
-| `baud_rate` | `115200` | Serial baud rate |
-| `wheel_radius` | `0.04` | Wheel radius (m) |
-| `wheel_separation` | `0.325` | Distance between wheels (m) |
-| `ticks_per_rev` | `996.8` | Encoder ticks per full wheel revolution |
-| `max_pwm` | `255.0` | Maximum PWM value |
-| `max_rpm` | `100.0` | Maximum wheel RPM at max PWM |
-
-**Executable:** `motor_controller_node`
-
-```
-ros2 run glad_motor_controller motor_controller_node
-```
-
----
-
-## Data Flow
-
-```
-Teleop Keyboard         Nav2 Autonomy
-  │                       │
-  │ /cmd_vel/teleop       │ /cmd_vel/nav
-  ▼                       ▼
-┌─────────────────────────────────┐
-│      glad_twist_mux              │  Priority: stop(100) > teleop(70) > nav(40)
-│  ─► /cmd_vel/stop (Bool)        │
-└─────────┬───────────────────────┘
-          │ /cmd_vel/raw
-          ▼
-┌─────────────────────────────────┐
-│  glad_trajectory_controller     │  Accel/decel ramping
-└─────────┬───────────────────────┘
-          │ /cmd_vel
-          ▼
-┌─────────────────────────────────┐
-│  glad_motor_controller          │  Inverse kinematics → PWM → serial → ESP32
-│  ─► odom (encoder-based)        │
-└─────────────────────────────────┘
-```
-
-## Combined Launch
-
-The teleop launch file starts all four nodes plus the trajectory and mux as dependencies:
-
-```
-ros2 launch glad_teleop teleop_launch.py
-```
-
-### Individual launches
-
-```
-ros2 launch glad_motor_controller motor_controller.launch.py
-ros2 launch glad_trajectory_controller trajectory_controller_launch.py
-ros2 launch glad_twist_mux twist_mux_launch.py
-ros2 run glad_teleop teleop_node
-```
-
-## Dependencies
-
-- ROS 2 (`rclpy`, `launch_ros`)
-- `geometry_msgs`, `nav_msgs`, `std_msgs`
-- `tf2_ros`
-- `pyserial`
-
-## Build
+## 🚀 Building & Launching
 
 ```bash
 colcon build --packages-select glad_teleop glad_twist_mux glad_trajectory_controller glad_motor_controller
 source install/setup.bash
+```
+
+### Launch entire motion stack:
+```bash
+ros2 launch glad_teleop teleop_launch.py
+```
+
+### Drive manually in its own dedicated window:
+```bash
+ros2 run glad_teleop teleop_node
 ```

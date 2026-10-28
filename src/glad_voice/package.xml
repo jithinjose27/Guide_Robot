@@ -2,17 +2,18 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>glad_voice</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="jithin27j@gmail.com">root</maintainer>
-  <license>TODO: License declaration</license>
+  <version>1.0.0</version>
+  <description>Voice-activated AI assistant with wake-word detection and Gemini streaming responses</description>
+  <maintainer email="jithin27j@gmail.com">Jithin Jose</maintainer>
+  <license>Apache-2.0</license>
 
-  <depend>rclpy</depend>
+  <buildtool_depend>ament_python</buildtool_depend>
 
-  <test_depend>ament_copyright</test_depend>
+  <exec_depend>rclpy</exec_depend>
+
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <test_depend>pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

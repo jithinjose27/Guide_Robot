@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import Twist, Quaternion
-from nav_msgs.msg import Odometry
-from tf2_ros import TransformBroadcaster
-import serial
+"""
+ESP32 Differential Drive Motor Bridge for G.L.A.D.
+
+Connects to ESP32 motor driver board via UART serial:
+- Converts /cmd_vel (Twist) -> differential wheel velocities -> PWM commands sent over serial.
+- Reads encoder tick counts over serial -> calculates wheel odometry -> publishes /motor/odom.
+"""
+
+import math
 import threading
 import time
-import math
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist, Quaternion, Point, Pose, Vector3
+from nav_msgs.msg import Odometry
+import serial
 
 
 class ESP32MotorBridge(Node):
@@ -21,267 +28,180 @@ class ESP32MotorBridge(Node):
         self.declare_parameter("ticks_per_rev", 996.8)
         self.declare_parameter("max_pwm", 255.0)
         self.declare_parameter("max_rpm", 100.0)
+        self.declare_parameter("odom_topic", "/motor/odom")
+        self.declare_parameter("cmd_vel_topic", "cmd_vel")
 
-        self.wheel_radius = self.get_parameter("wheel_radius").value
-        self.wheel_separation = self.get_parameter("wheel_separation").value
-        self.ticks_per_rev = self.get_parameter("ticks_per_rev").value
-        self.max_pwm = self.get_parameter("max_pwm").value
-        self.max_rpm = self.get_parameter("max_rpm").value
+        self.wheel_radius = float(self.get_parameter("wheel_radius").value)
+        self.wheel_separation = float(self.get_parameter("wheel_separation").value)
+        self.ticks_per_rev = float(self.get_parameter("ticks_per_rev").value)
+        self.max_pwm = float(self.get_parameter("max_pwm").value)
+        self.max_rpm = float(self.get_parameter("max_rpm").value)
+        odom_topic = self.get_parameter("odom_topic").value
+        cmd_vel_topic = self.get_parameter("cmd_vel_topic").value
 
         port = self.get_parameter("serial_port").value
-        baud = self.get_parameter("baud_rate").value
+        baud = int(self.get_parameter("baud_rate").value)
 
+        self.ser = None
         try:
-            self.ser = serial.Serial(port, baud, timeout=1)
-            self.get_logger().info(f"Connected to ESP32 on {port} at {baud}")
-        except serial.SerialException as e:
-            self.get_logger().error(f"Failed to connect to Serial: {e}")
-            # We exit because the node is useless without the hardware connection
-            exit(1)
+            self.ser = serial.Serial(port, baud, timeout=0.1)
+            self.get_logger().info(f"Connected to ESP32 motor driver on {port} @ {baud}")
+        except Exception as e:
+            self.get_logger().warn(
+                f"Could not open ESP32 serial port '{port}': {e}. "
+                "Ensure ESP32 is plugged in and user is in dialout group (sudo usermod -a -G dialout $USER). "
+                "Node will remain online in simulation/dry-run mode."
+            )
 
-        # --- Odometry State Variables ---
+        # Odometry state
         self.x = 0.0
         self.y = 0.0
         self.th = 0.0
-
-        # Track previous tick counts to calculate delta
         self.prev_ticks_left = 0
         self.prev_ticks_right = 0
-
         self.last_odom_time = self.get_clock().now()
 
-        # --- ROS 2 Publishers & Subscribers ---
-        # Publisher: Where is the robot? (Odometry)
-        self.odom_pub = self.create_publisher(Odometry, "odom", 10)
+        # Publishers & Subscribers
+        self.odom_pub = self.create_publisher(Odometry, odom_topic, 10)
+        self.create_subscription(Twist, cmd_vel_topic, self.cmd_vel_callback, 10)
 
-        # Publisher: TF (Coordinate transform for Rviz)
-        self.tf_broadcaster = TransformBroadcaster(self)
-
-        # Subscriber: Velocity Commands (from Nav2 or Teleop)
-        self.create_subscription(Twist, "cmd_vel", self.cmd_vel_callback, 10)
-
-        # --- Multi-Threading for Serial ---
-        # We read serial in a background thread so it doesn't block ROS
+        # Background thread for continuous serial reads
         self.lock = threading.Lock()
-        self.latest_ticks = [0, 0]  # Stores [Left, Right] ticks safely
+        self.latest_ticks = [0, 0]
         self.stop_thread = False
-        self.read_thread = threading.Thread(target=self.read_serial_loop)
-        self.read_thread.start()
 
-        # --- Timer Loop ---
-        # Run the odometry calculation at 20Hz (every 0.05s)
+        if self.ser and self.ser.is_open:
+            self.read_thread = threading.Thread(target=self.read_serial_loop, daemon=True)
+            self.read_thread.start()
+
+        # 20 Hz odometry loop
         self.create_timer(0.05, self.update_odometry)
+        self.get_logger().info(f"ESP32 motor bridge active -> publishing {odom_topic}")
 
-    def cmd_vel_callback(self, msg):
-        """
-        Receives Twist msg -> Calculates PWM -> Sends to ESP32
-        """
-        linear_x = msg.linear.x  # Forward/Backward speed (m/s)
-        angular_z = msg.angular.z  # Rotation speed (rad/s)
+    def cmd_vel_callback(self, msg: Twist):
+        """Convert Twist velocity into individual motor PWM and send over serial."""
+        if not self.ser or not self.ser.is_open:
+            return
 
-        # 1. Inverse Kinematics (Differential Drive)
-        # Calculate individual wheel velocities (m/s)
+        linear_x = msg.linear.x
+        angular_z = msg.angular.z
+
+        # Differential drive inverse kinematics
         vel_right = linear_x + (angular_z * self.wheel_separation / 2.0)
         vel_left = linear_x - (angular_z * self.wheel_separation / 2.0)
 
-        # 2. Convert Velocity (m/s) to RPM
-        # RPM = (Velocity / Wheel_Circumference) * 60
-        circumference = 2 * math.pi * self.wheel_radius
+        # Velocity (m/s) -> RPM
+        circumference = 2.0 * math.pi * self.wheel_radius
         rpm_right = (vel_right / circumference) * 60.0
         rpm_left = (vel_left / circumference) * 60.0
 
-        # 3. Map RPM to PWM (Simple Linear Mapping)
-        # PWM = (Target_RPM / Max_RPM) * 255
+        # RPM -> PWM mapping
         pwm_right = int((rpm_right / self.max_rpm) * self.max_pwm)
         pwm_left = int((rpm_left / self.max_rpm) * self.max_pwm)
 
-        # 4. Clamp values to keep them within valid ESP32 range (-255 to 255)
-        pwm_right = max(-255, min(255, pwm_right))
-        pwm_left = max(-255, min(255, pwm_left))
+        # Clamp to [-255, 255]
+        pwm_right = max(-int(self.max_pwm), min(int(self.max_pwm), pwm_right))
+        pwm_left = max(-int(self.max_pwm), min(int(self.max_pwm), pwm_left))
 
-        # 5. Send Command to ESP32
-        # Protocol: "PWM_LEFT,PWM_RIGHT\n" (e.g., "100,100\n")
-        # NOTE: If your robot spins in place when told to go forward, swap these variables.
         command = f"{pwm_right},{pwm_left}\n"
-
         try:
             self.ser.write(command.encode("utf-8"))
         except Exception as e:
-            self.get_logger().error(f"Serial Write Error: {e}")
+            self.get_logger().warn(f"Serial write error: {e}")
 
     def read_serial_loop(self):
-        """
-        Background thread: Continuously reads "POS1,POS2" from ESP32
-        """
+        """Continuously parse incoming tick counts from ESP32."""
         while not self.stop_thread and rclpy.ok():
             try:
-                if self.ser.in_waiting > 0:
-                    line = self.ser.readline().decode("utf-8").strip()
-                    # Expected format from ESP32: "1205,3004"
+                if self.ser and self.ser.in_waiting > 0:
+                    line = self.ser.readline().decode("utf-8", errors="ignore").strip()
                     if "," in line:
                         parts = line.split(",")
                         if len(parts) == 2:
-                            with self.lock:  # Thread-safe write
+                            with self.lock:
                                 try:
-                                    # Assuming ESP sends Motor1 (Left), Motor2 (Right)
                                     self.latest_ticks[0] = int(parts[1])
                                     self.latest_ticks[1] = int(parts[0])
                                 except ValueError:
-                                    pass  # Ignore corrupted lines
+                                    pass
             except Exception:
                 pass
-            time.sleep(0.005)  # Tiny sleep to prevent high CPU usage
+            time.sleep(0.005)
 
     def update_odometry(self):
-        """
-        Calculates robot position from encoder ticks and publishes /odom
-        """
+        """Calculate forward kinematics from encoder ticks and publish Odometry."""
         current_time = self.get_clock().now()
 
-        # Thread-safe read of latest encoder data
         with self.lock:
             curr_ticks_left = self.latest_ticks[0]
             curr_ticks_right = self.latest_ticks[1]
 
-        # Calculate Delta Ticks (Change since last loop)
         d_ticks_left = curr_ticks_left - self.prev_ticks_left
         d_ticks_right = curr_ticks_right - self.prev_ticks_right
 
-        # Update history
         self.prev_ticks_left = curr_ticks_left
         self.prev_ticks_right = curr_ticks_right
 
-        # 1. Convert Ticks to Distance (meters)
-        # Distance = (DeltaTicks / TicksPerRev) * WheelCircumference
-        d_left = (d_ticks_left / self.ticks_per_rev) * (2 * math.pi * self.wheel_radius)
-        d_right = (d_ticks_right / self.ticks_per_rev) * (
-            2 * math.pi * self.wheel_radius
-        )
+        circumference = 2.0 * math.pi * self.wheel_radius
+        d_left = (d_ticks_left / self.ticks_per_rev) * circumference
+        d_right = (d_ticks_right / self.ticks_per_rev) * circumference
 
-        # 2. Calculate Robot Motion
-        # d_center: Distance the center of the robot moved
-        # d_theta:  Angle the robot turned
         d_center = (d_right + d_left) / 2.0
         d_theta = (d_right - d_left) / self.wheel_separation
 
-        # 3. Update Global Pose (x, y, theta)
         self.x += d_center * math.cos(self.th)
         self.y += d_center * math.sin(self.th)
         self.th += d_theta
-
-        # Normalize angle to -pi to pi (standard practice)
         self.th = math.atan2(math.sin(self.th), math.cos(self.th))
 
-        # 4. Create Quaternion for ROS (ROS uses Quaternions, not Euler angles)
-        q = self.euler_to_quaternion(0, 0, self.th)
+        dt = (current_time - self.last_odom_time).nanoseconds / 1e9
+        self.last_odom_time = current_time
 
-        # --- PUBLISH ODOMETRY ---
+        vx = d_center / dt if dt > 0.0 else 0.0
+        vth = d_theta / dt if dt > 0.0 else 0.0
+
+        q = self.euler_to_quaternion(0.0, 0.0, self.th)
+
         odom = Odometry()
         odom.header.stamp = current_time.to_msg()
         odom.header.frame_id = "odom"
         odom.child_frame_id = "base_link"
 
-        # Position
-        odom.pose.pose.position.x = self.x
-        odom.pose.pose.position.y = self.y
-        odom.pose.pose.position.z = 0.0
-        odom.pose.pose.orientation = q
+        odom.pose.pose = Pose(
+            position=Point(x=float(self.x), y=float(self.y), z=0.0),
+            orientation=q,
+        )
+        odom.twist.twist = Twist(
+            linear=Vector3(x=float(vx), y=0.0, z=0.0),
+            angular=Vector3(x=0.0, y=0.0, z=float(vth)),
+        )
 
-        # Velocity (Optional, but helps Navigation Stack)
-        # Velocity (Optional, but helps Navigation Stack)
-        dt = (current_time - self.last_odom_time).nanoseconds / 1e9
-        if dt > 0:
-            odom.twist.twist.linear.x = d_center / dt
-            odom.twist.twist.angular.z = d_theta / dt
-
-        # --- NEW CODE: Add Covariance Matrix ---
-        odom.pose.covariance = [
-            0.1,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.1,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1e-6,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1e-6,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1e-6,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.1,
-        ]
-        odom.twist.covariance = odom.pose.covariance
-        # ---------------------------------------
+        cov = [0.0] * 36
+        cov[0] = 0.05
+        cov[7] = 0.05
+        cov[14] = 1e6
+        cov[21] = 1e6
+        cov[28] = 1e6
+        cov[35] = 0.1
+        odom.pose.covariance = cov
+        odom.twist.covariance = cov
 
         self.odom_pub.publish(odom)
 
-        # --- PUBLISH TF (Transform) ---
-        # This connects the 'odom' frame to the 'base_link' frame
-        # t = TransformStamped()
-        # t.header.stamp = current_time.to_msg()
-        # t.header.frame_id = "odom"
-        # t.child_frame_id = "base_link"
-        # t.transform.translation.x = self.x
-        # t.transform.translation.y = self.y
-        # t.transform.translation.z = 0.0
-        # t.transform.rotation = q
-
-        # self.tf_broadcaster.sendTransform(t)
-
-        # CRITICAL FIX: Uncommented this so velocity calculates correctly!
-        self.last_odom_time = current_time
-
-    def euler_to_quaternion(self, roll, pitch, yaw):
-        """Math helper to convert angles to Quaternions"""
-        qx = math.sin(roll / 2) * math.cos(pitch / 2) * math.cos(yaw / 2) - math.cos(
-            roll / 2
-        ) * math.sin(pitch / 2) * math.sin(yaw / 2)
-        qy = math.cos(roll / 2) * math.sin(pitch / 2) * math.cos(yaw / 2) + math.sin(
-            roll / 2
-        ) * math.cos(pitch / 2) * math.sin(yaw / 2)
-        qz = math.cos(roll / 2) * math.cos(pitch / 2) * math.sin(yaw / 2) - math.sin(
-            roll / 2
-        ) * math.sin(pitch / 2) * math.cos(yaw / 2)
-        qw = math.cos(roll / 2) * math.cos(pitch / 2) * math.cos(yaw / 2) + math.sin(
-            roll / 2
-        ) * math.sin(pitch / 2) * math.sin(yaw / 2)
-        return Quaternion(x=qx, y=qy, z=qz, w=qw)
+    @staticmethod
+    def euler_to_quaternion(roll: float, pitch: float, yaw: float) -> Quaternion:
+        half_yaw = yaw * 0.5
+        return Quaternion(x=0.0, y=0.0, z=math.sin(half_yaw), w=math.cos(half_yaw))
 
     def on_shutdown(self):
-        """Cleanup when node is killed"""
         self.stop_thread = True
-        if self.read_thread.is_alive():
-            self.read_thread.join()
-        # Send Stop Command to Motors
-        try:
-            self.ser.write(b"0,0\n")
-            self.ser.close()
-        except Exception:
-            pass
-        self.get_logger().info("Motors Stopped. Serial Closed.")
+        if self.ser and self.ser.is_open:
+            try:
+                self.ser.write(b"0,0\n")
+                time.sleep(0.05)
+                self.ser.close()
+            except Exception:
+                pass
 
 
 def main(args=None):
@@ -289,12 +209,13 @@ def main(args=None):
     node = ESP32MotorBridge()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.on_shutdown()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

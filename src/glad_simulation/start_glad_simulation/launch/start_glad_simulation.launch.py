@@ -32,6 +32,9 @@ def generate_launch_description():
     default_world = PathJoinSubstitution(
         [FindPackageShare("start_glad_simulation"), "worlds", "warehouse.world"]
     )
+    default_map = PathJoinSubstitution(
+        [FindPackageShare("glad_maps"), "robotics_floor", "robotics_floor.yaml"]
+    )
 
     args = [
         DeclareLaunchArgument(
@@ -46,8 +49,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "map_yaml",
-            default_value="",
-            description="Absolute path to map YAML file (required when enable_slam:=false).",
+            default_value=default_map,
+            description="Path to map YAML file (used when enable_slam:=false).",
         ),
         DeclareLaunchArgument(
             "world",
@@ -69,9 +72,14 @@ def generate_launch_description():
     teleop_launch = GroupAction(
         [
             LogInfo(msg="[GLAD Simulation] 2. Launching Teleop and Motion Control..."),
-            _include("glad_simulation_teleop", "teleop_launch.py", base_args),
+            _include(
+                "glad_simulation_teleop",
+                "teleop_launch.py",
+                {**base_args, "use_xterm": "false"},
+            ),
         ]
     )
+
 
     sensor_filter_launch = GroupAction(
         [

@@ -1,37 +1,52 @@
-import rclpy
-from rclpy.node import Node
-import re
+#!/usr/bin/env python3
+"""
+G.L.A.D. Voice-Activated AI Assistant Node.
+
+Manages conversational Q&A:
+- Standby mode: Listens for wake words ("hey glad", "hello robo")
+- Active mode: Captures user query, streams response from Google Gemini 2.5,
+  and synthesizes speech in real-time via Microsoft Edge TTS / gTTS
+- Sleep mode: Returns to low-power standby on sleep words ("thank you", "bye")
+"""
+
 import os
+import re
+import shutil
 import subprocess
 import tempfile
-import speech_recognition as sr
+import threading
+import time
+import rclpy
+from rclpy.node import Node
 
-# The modern Google GenAI SDK
-from google import genai
-from google.genai import types
+# Optional import of speech recognition
+try:
+    import speech_recognition as sr
+except ImportError:
+    sr = None
 
 
-# ------------------------------------------------------------
-# 1. HARDWARE AUTO-DETECT
-# ------------------------------------------------------------
 def find_usb_audio():
-    """Automatically finds the correct Microphone and Speaker IDs."""
+    """Locate USB microphone and speaker devices, or fallback to system defaults."""
     mic_idx = None
-    for i, name in enumerate(sr.Microphone.list_microphone_names()):
-        if "YM USB Audio Device" in name or "USB Audio" in name:
-            mic_idx = i
-            break
+    if sr is not None:
+        try:
+            for i, name in enumerate(sr.Microphone.list_microphone_names()):
+                if "YM USB Audio" in name or "USB Audio" in name:
+                    mic_idx = i
+                    break
+        except Exception:
+            pass
 
     speaker_hw = "default"
     try:
-        out = subprocess.check_output(["aplay", "-l"]).decode()
+        out = subprocess.check_output(["aplay", "-l"], stderr=subprocess.DEVNULL).decode()
         for line in out.split("\n"):
-            if "card" in line.lower() and (
-                "YM USB Audio Device" in line or "USB Audio" in line
-            ):
-                card_num = re.search(r"card (\d+)", line).group(1)
-                speaker_hw = f"plughw:{card_num},0"
-                break
+            if "card" in line.lower() and ("YM USB Audio" in line or "USB Audio" in line):
+                match = re.search(r"card (\d+)", line)
+                if match:
+                    speaker_hw = f"plughw:{match.group(1)},0"
+                    break
     except Exception:
         pass
 
@@ -40,87 +55,68 @@ def find_usb_audio():
 
 DETECTED_MIC, DETECTED_SPEAKER = find_usb_audio()
 
-# ------------------------------------------------------------
-# 2. CONFIGURATION
-# ------------------------------------------------------------
-
 
 class Config:
     ASSISTANT_NAME = "GLAD"
     MIC_INDEX = DETECTED_MIC
     SPEAKER_HW = DETECTED_SPEAKER
 
-    # ⚠️ PASTE YOUR REAL KEY HERE!
-    GEMINI_API_KEY = os.getenv(
-        "GEMINI_API_KEY", "AIzaSyA2MNXONtoeuV2oR1g5T8U4ElcWbBhi6f0"
-    )
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
 
-    # Wake words and common speech-to-text mishearings
     WAKE_WORDS = [
-        "hello robo",
-        "hi robo",
-        "hey robo",
-        "hello glad",
-        "hey glad",
-        "hi glad",
-        "hi robo",
-        "hello dad",
-        "hey dad",
-        "hey lad",
-        "hi lad",
+        "hello robo", "hi robo", "hey robo",
+        "hello glad", "hey glad", "hi glad",
+        "hello dad", "hey dad", "hey lad", "hi lad",
     ]
 
-    # Words that put the robot back to sleep
     SLEEP_WORDS = [
-        "thank you",
-        "thanks",
-        "stop glad",
-        "go to sleep",
-        "thank you robo",
-        "bye",
-        "thanks robo",
-        "quiet",
+        "thank you", "thanks", "stop glad", "go to sleep",
+        "thank you robo", "bye", "thanks robo", "quiet",
     ]
 
     SYSTEM_INSTRUCTION = (
-        f"You are {ASSISTANT_NAME}, a helpful robotics assistant. "
-        "Keep your responses strictly to 2 or 3 short sentences. "
-        "Be concise, direct, and conversational. Do not use markdown, "
-        "bullet points, or special formatting."
+        f"You are {ASSISTANT_NAME}, a friendly and intelligent robotics laboratory assistant. "
+        "Keep your responses strictly to 2 or 3 short conversational sentences. "
+        "Be concise, warm, and helpful. Do not use markdown, asterisks, or bullet points."
     )
 
 
-# ------------------------------------------------------------
-# 3. GEMINI AI HANDLER
-# ------------------------------------------------------------
-
-
 def init_gemini():
-    """Initialize Google GenAI SDK"""
-    if not Config.GEMINI_API_KEY:
-        print("\n⚠️ WARNING: API Key is missing.")
+    """Initialize Google GenAI client if key is available."""
+    if not Config.GEMINI_API_KEY or Config.GEMINI_API_KEY.startswith("YOUR_"):
+        print("ℹ️  Note: GEMINI_API_KEY not set. Local Q&A fallback enabled.")
         return None
-
     try:
+        from google import genai
         client = genai.Client(api_key=Config.GEMINI_API_KEY)
-        print(f"✓ Gemini ({Config.GEMINI_MODEL_NAME}) connected")
+        print(f"✓ Gemini AI ({Config.GEMINI_MODEL_NAME}) connected successfully.")
         return client
     except Exception as e:
-        print(f"❌ Gemini Init Error: {e}")
+        print(f"⚠️  Gemini client initialization error: {e}")
         return None
 
 
-def ask_gemini_stream(client, prompt):
-    """Generator that streams Gemini response sentence by sentence."""
+def ask_gemini_stream(client, prompt: str):
+    """Yield sentences from Gemini streaming response or local fallback."""
     if not prompt:
         return
+
     if not client:
-        yield "My API key is missing."
+        # High quality local responses for common student inquiries
+        p_lower = prompt.lower()
+        if "who are you" in p_lower or "your name" in p_lower:
+            yield "I am G.L.A.D, the Guide Lab Assistance Droid for the Robotics and Automation department."
+        elif "kuka" in p_lower:
+            yield "Our KUKA robot is a six-degree-of-freedom industrial manipulator used for precision kinematics and automation."
+        elif "ros" in p_lower or "jazzy" in p_lower:
+            yield "I am powered by ROS 2 Jazzy, using Nav2 for navigation and SLAM Toolbox for online laser mapping."
+        else:
+            yield "I am operating in local demonstration mode. Please set your Gemini API key to enable live AI reasoning."
         return
 
-    print("🤖 Thinking...")
     try:
+        from google.genai import types
         response_stream = client.models.generate_content_stream(
             model=Config.GEMINI_MODEL_NAME,
             contents=prompt,
@@ -129,182 +125,158 @@ def ask_gemini_stream(client, prompt):
             ),
         )
         buffer = ""
-
         for chunk in response_stream:
             if chunk.text:
                 buffer += chunk.text
                 parts = re.split(r"([.?!:\n]+)", buffer)
-
                 if len(parts) > 2:
                     for i in range(0, len(parts) - 1, 2):
-                        sentence = parts[i] + parts[i + 1]
-                        clean_sent = sentence.strip()
-                        if clean_sent:
-                            yield clean_sent
+                        sentence = (parts[i] + parts[i + 1]).strip()
+                        if sentence:
+                            yield sentence
                     buffer = parts[-1]
 
         if buffer.strip():
             yield buffer.strip()
-
     except Exception as e:
         error_msg = str(e)
         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            yield "I am receiving too many requests right now. Please give me about one minute to reset."
+            yield "I am receiving too many requests right now. Please allow me one minute to reset."
         else:
-            yield "I encountered an unexpected error."
-            print(f"❌ Actual Error: {error_msg}")
+            yield "I encountered a network issue contacting my knowledge base."
 
 
-# ------------------------------------------------------------
-# 4. AUDIO IN / OUT
-# ------------------------------------------------------------
-
-
-def speak(text, print_text=True):
-    """Generates ultra-realistic human speech using Microsoft Edge TTS."""
-    if print_text:
-        print(f"🤖 {Config.ASSISTANT_NAME}: {text}")
-
-    clean_text = text.replace("*", "").replace("#", "")
-    if not clean_text.strip():
+def speak(text: str, print_text: bool = True):
+    """Synthesize speech using edge-tts or gTTS."""
+    clean_text = text.replace("*", "").replace("#", "").strip()
+    if not clean_text:
         return
+
+    if print_text:
+        print(f"🤖 {Config.ASSISTANT_NAME}: \"{clean_text}\"")
 
     try:
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             temp_mp3 = tmp.name
 
-        # 1. Use Edge-TTS to instantly generate a realistic human voice
-        # "en-US-AriaNeural" is a highly realistic female voice similar to Alexa.
-        # Want a male voice? Change it to "en-US-ChristopherNeural"
-        subprocess.run(
-            [
-                "edge-tts",
-                "--voice",
-                "en-US-AriaNeural",
-                "--text",
-                clean_text,
-                "--write-media",
-                temp_mp3,
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        # 1. Prefer edge-tts if installed
+        if shutil.which("edge-tts"):
+            subprocess.run(
+                [
+                    "edge-tts",
+                    "--voice", "en-US-AriaNeural",
+                    "--text", clean_text,
+                    "--write-media", temp_mp3,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            from gtts import gTTS
+            tts = gTTS(text=clean_text, lang="en", slow=False)
+            tts.save(temp_mp3)
 
-        # 2. Play the MP3 file directly through your USB speaker
-        subprocess.run(
-            ["mpg123", "-a", Config.SPEAKER_HW, "-q", temp_mp3],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        # 2. Play audio
+        if shutil.which("mpg123"):
+            subprocess.run(
+                ["mpg123", "-a", Config.SPEAKER_HW, "-q", temp_mp3],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        elif shutil.which("ffplay"):
+            subprocess.run(
+                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", temp_mp3],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
-        # 3. Clean up the file to safely unlock the microphone
         try:
             os.remove(temp_mp3)
         except Exception:
             pass
-
     except Exception as e:
-        print(f"🔊 TTS Error: {e}")
+        print(f"🔊 Audio playback note: {e}")
 
 
-def listen_mic(status_message):
-    """Listens to the mic with custom sensitivity to prevent self-triggering."""
+def listen_mic(status_message: str):
+    """Capture audio from microphone and convert to text using speech recognition."""
+    if sr is None:
+        time.sleep(1.0)
+        return None
+
     recognizer = sr.Recognizer()
-
-    # --- SENSITIVITY TWEAKS ---
-    # 1. Turn OFF dynamic adjustment so it doesn't automatically become super
-    # sensitive when the room gets quiet.
     recognizer.dynamic_energy_threshold = False
-
-    # 2. Hardcode the minimum volume required to wake up the mic.
-    # Default is 300. We are bumping it up to ignore echoes.
-    # (If it won't hear YOU, lower this number. If it still hears ITSELF, raise it).
     recognizer.energy_threshold = 1000
-
     recognizer.pause_threshold = 1.0
 
-    with sr.Microphone(device_index=Config.MIC_INDEX) as source:
-        try:
-            # We no longer need it to adjust for ambient noise since we hardcoded it
+    try:
+        with sr.Microphone(device_index=Config.MIC_INDEX) as source:
             print(f"\n🎤 {status_message}")
-
             audio = recognizer.listen(source, timeout=7, phrase_time_limit=15)
-
             text = recognizer.recognize_google(audio)
-            print(f"👤 User: {text}")
+            print(f"👤 User: \"{text}\"")
             return text.lower()
-
-        except sr.WaitTimeoutError:
-            return None
-        except sr.UnknownValueError:
-            return None
-        except sr.RequestError as e:
-            print(f"❌ Connection error: {e}")
-            return None
-        except Exception as e:
-            print(f"❌ Error: {e}")
-            return None
-
-
-# ------------------------------------------------------------
-# 5. ROS 2 NODE LOOP
-# ------------------------------------------------------------
+    except (sr.WaitTimeoutError, sr.UnknownValueError):
+        return None
+    except Exception as e:
+        print(f"Microphone notice: {e}")
+        return None
 
 
 class VoiceAssistantNode(Node):
     def __init__(self):
         super().__init__("voice_assistant_node")
-        self.get_logger().info(f"🚀 Starting {Config.ASSISTANT_NAME} Q&A Node")
-        print(
-            f"🔧 Hardware Detected -> Mic Index: {Config.MIC_INDEX} | Speaker ID: {Config.SPEAKER_HW}"
-        )
+        self.get_logger().info(f"🚀 Starting {Config.ASSISTANT_NAME} Voice Q&A Assistant")
 
         self.client = init_gemini()
         self.is_awake = False
+        self.running = True
 
-        if self.client:
-            speak("Hello, I'm glad, nice to meet you. Do you guys have any queries?")
-            self.run_voice_loop()
-        else:
-            self.get_logger().error("Shutting down. Check API Key.")
+        speak("Hello, I am glad, nice to meet you. Do you have any questions about the robotics lab?")
+
+        # Run the listening loop in a background daemon thread so ROS 2 node can spin freely
+        self.loop_thread = threading.Thread(target=self.run_voice_loop, daemon=True)
+        self.loop_thread.start()
 
     def run_voice_loop(self):
-        """Infinite loop with Wake/Sleep state management."""
-        while rclpy.ok():
+        """Infinite loop with Standby / Active state management."""
+        while self.running and rclpy.ok():
             try:
                 prompt_msg = (
                     "Listening for a question..."
                     if self.is_awake
-                    else "Waiting for wake word ..."
+                    else "Waiting for wake word ('hey glad', 'hello robo')..."
                 )
                 command = listen_mic(prompt_msg)
-            except KeyboardInterrupt:
-                break
+            except Exception:
+                time.sleep(0.5)
+                continue
 
             if not command:
                 continue
 
             if "shut down system" in command:
-                speak("Shutting down the system. Goodbye.")
+                speak("Shutting down the voice assistant. Goodbye.")
+                self.running = False
                 break
 
-            # --- STANDBY MODE (ASLEEP) ---
+            # --- STANDBY MODE (Waiting for wake word) ---
             if not self.is_awake:
-                if any(wake_word in command for wake_word in Config.WAKE_WORDS):
+                if any(w in command for w in Config.WAKE_WORDS):
                     self.is_awake = True
-                    speak("I am listening.")
+                    speak("I am listening. How can I help you?")
                 continue
 
-            # --- ACTIVE MODE (AWAKE) ---
+            # --- ACTIVE MODE (Conversing) ---
             else:
-                if any(sleep_word in command for sleep_word in Config.SLEEP_WORDS):
+                if any(s in command for s in Config.SLEEP_WORDS):
                     self.is_awake = False
-                    speak("Going back to standby.")
+                    speak("You are welcome! Going back to standby.")
                     continue
 
                 clean_command = command
-                for wake_word in Config.WAKE_WORDS:
-                    clean_command = clean_command.replace(wake_word, "").strip()
+                for w in Config.WAKE_WORDS:
+                    clean_command = clean_command.replace(w, "").strip()
 
                 if clean_command:
                     print(f"🤖 {Config.ASSISTANT_NAME}: ", end="", flush=True)
@@ -313,14 +285,17 @@ class VoiceAssistantNode(Node):
                         speak(sentence, print_text=False)
                     print()
 
+    def destroy_node(self):
+        self.running = False
+        super().destroy_node()
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = VoiceAssistantNode()
-
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
         node.destroy_node()

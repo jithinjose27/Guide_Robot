@@ -1,107 +1,99 @@
-# GLAD Sensor Filter
+# GLAD Sensor Filter (EKF) 🛰️
 
-ROS 2 sensor fusion package using **robot_localization**'s Extended Kalman Filter (EKF) to combine odometry and IMU data into a single filtered state estimate.
+Welcome to the **`glad_sensor_filter`** package! This is the state estimation core of the robot. It takes noisy, imperfect readings from multiple different sensors and fuses them into a single, crystal-clear, rock-steady estimate of the robot's position and velocity.
 
-## Overview
+---
 
-Launches an `ekf_node` that fuses three sensor sources to produce a smooth, drift-corrected odometry estimate at 20 Hz.
+## 🧭 Why Do We Need Sensor Fusion?
 
-**Sensor sources fused:**
+No single sensor on a mobile robot is perfect:
+- **Wheel Encoders:** Great for tracking short-distance wheel rotation, but when wheels slip on smooth floors or bump over door sills, the robot thinks it is moving when it isn't.
+- **Laser Odometry (`rf2o`):** Very accurate in clutter-rich rooms by matching wall returns, but can drift or lose lock in long empty corridors or when people walk right in front of the scanner.
+- **IMU (Inertial Measurement Unit):** Fantastic at measuring rapid angular turns ($\omega_z$), but cannot directly measure forward position ($x, y$).
 
-| Source | Topic | Type | What's used |
-|--------|-------|------|-------------|
-| RF2O laser odometry | `/odom_rf2o` | `nav_msgs/Odometry` | Linear velocity X only |
-| Motor encoders | `/motor/odom` (remapped from `odom`) | `nav_msgs/Odometry` | Position X, Y (currently disabled in config) |
-| IMU orientation | `/imu/data` | `sensor_msgs/Imu` | Orientation Z (yaw) only |
+**Sensor fusion** combines the best strengths of each sensor while mathematically canceling out their individual weaknesses!
 
-**Topic published:**
+---
 
-| Topic | Type | Description |
-|-------|------|-------------|
-| `odom` (remapped from `odometry/filtered`) | `nav_msgs/Odometry` | Filtered odometry (pose + twist with covariance) |
-| `/tf` | `tf2_msgs/TFMessage` | Transform `odom → base_link` |
-
-## EKF Configuration
-
-All parameters in `config/glad_ekf_params.yaml`.
-
-### General
-
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| `frequency` | 20.0 | EKF update rate (Hz) |
-| `two_d_mode` | true | 2D mode (z, roll, pitch ignored) |
-| `publish_tf` | true | Broadcast `odom → base_link` |
-| `world_frame` | `odom` | World frame for the filter |
-
-### Sensor Inputs
-
-#### Source 1 — `/odom_rf2o` (Laser Odometry)
-
-Reads `linear_velocity.x` from the RF2O laser odometry node:
+## 🔄 The Data Flow Architecture
 
 ```
-odom0_config: X: ✗  Y: ✗  Z: ✗     (position)
-              roll: ✗  pitch: ✗  yaw: ✗
-              vX: ✓  vY: ✗  vZ: ✗   (velocity)
-              roll_dot: ✗  pitch_dot: ✗  yaw_dot: ✗
-```
-
-- `differential`: false
-- `relative`: false
-
-#### Source 2 — `/motor/odom` (Wheel Odometry)
-
-Motor encoder odometry from `glad_motor_controller`. Currently all states are disabled (not fused), set up as a placeholder for future use.
-
-#### Source 3 — `/imu/data` (IMU Orientation)
-
-Reads `orientation.z` (yaw) from the Madgwick-filtered IMU:
-
-```
-imu0_config: X: ✗  Y: ✗  Z: ✗
-             roll: ✗  pitch: ✗  yaw: ✓
-             vX: ✗  vY: ✗  vZ: ✗
-             roll_dot: ✗  pitch_dot: ✗  yaw_dot: ✗
-```
-
-- `relative`: true (treats yaw as relative delta rather than absolute heading)
-
-## Launch
-
-```
-ros2 launch glad_sensor_filter glad_ekf_launch.py
-```
-
-The launch file remaps `odometry/filtered` → `odom` so downstream nodes (Nav2, etc.) receive the filtered estimate as the primary odometry topic. The `glad_sensor_filter` node itself is a lightweight wrapper that declares compatible parameters — the actual EKF logic runs inside the `robot_localization::ekf_node`.
-
-## Pipeline Position
-
-```
-RF2O Laser Odometry    Motor Encoder Odometry    Madgwick IMU
-  │                        │                        │
-  │ /odom_rf2o             │ /motor/odom            │ /imu/data
-  ▼                        ▼                        ▼
-┌──────────────────────────────────────────────────────┐
-│              robot_localization EKF                  │
-│  ─► fuses vX from laser odometry                     │
-│  ─► fuses yaw from IMU orientation                   │
-│  ─► produces filtered pose + twist                   │
-└──────────────────────┬───────────────────────────────┘
-                       │ odom (remapped)
+ Laser Odometry         Wheel Encoders               Madgwick IMU
+  (/odom_rf2o)           (/motor/odom)                (/imu/data)
+       │                       │                           │
+       │ vx, vy                │ vx (fallback)             │ yaw, vyaw (angular rate)
+       └───────────────┬───────┴───────────────────────────┘
                        ▼
-              Nav2, AMCL, etc.
+       ┌───────────────────────────────┐
+       │     Extended Kalman Filter    │
+       │  (glad_ekf_node / ekf_node)   │
+       │  ─► Integrates planar motion  │
+       │  ─► Fuses IMU heading         │
+       │  ─► Eliminates drift          │
+       └───────────────┬───────────────┘
+                       │
+       ┌───────────────┴───────────────┐
+       ▼                               ▼
+  Topic: /odom                    TF Transform:
+(nav_msgs/Odometry)             odom ──► base_link
+       │
+       ▼
+ Nav2, AMCL, SLAM
 ```
 
-## Dependencies
+---
 
-- ROS 2 (`rclpy`, `launch_ros`)
-- `robot_localization`
-- `nav_msgs`, `geometry_msgs`, `sensor_msgs`
+## ⚙️ Dual-Mode Flexibility: Python or C++
 
-## Build
+To ensure **everyone can run this project effortlessly on any machine**, this package supports two complementary execution engines:
+
+1. **Built-in Python 2D EKF (`glad_ekf_node`):**
+   - Active by default.
+   - Requires **zero external C++ dependencies** beyond standard ROS 2.
+   - Runs a lightweight kinematic prediction-correction filter at 20 Hz.
+   - Broadcasts the continuous `odom → base_link` TF transform.
+2. **Industrial C++ EKF (`robot_localization`):**
+   - Can be activated whenever `ros-jazzy-robot-localization` is installed.
+   - Full 15-state covariance-based nonlinear Extended Kalman Filter.
+   - Enabled with a simple launch flag: `use_robot_localization:=true`.
+
+---
+
+## 🛠️ Configuration (`config/glad_ekf_params.yaml`)
+
+| Parameter | Default | Description |
+|---|---|---|
+| `frequency` | `20.0 Hz` | EKF filter update rate. |
+| `two_d_mode` | `true` | Planar ground robot mode ($z$, roll, pitch held constant). |
+| `publish_tf` | `true` | Broadcasts `odom → base_link` transform. |
+| `odom_frame` | `odom` | The continuous odometric reference frame. |
+| `base_link_frame` | `base_link` | The robot chassis reference frame. |
+
+---
+
+## 🚀 Building & Launching
 
 ```bash
 colcon build --packages-select glad_sensor_filter
 source install/setup.bash
+```
+
+### Launch in Built-in Mode (Zero extra dependencies):
+```bash
+ros2 launch glad_sensor_filter glad_ekf_launch.py
+```
+
+### Launch with Industrial `robot_localization` C++ node:
+```bash
+# If installed via: sudo apt install ros-jazzy-robot-localization
+ros2 launch glad_sensor_filter glad_ekf_launch.py use_robot_localization:=true
+```
+
+### Verify Output:
+```bash
+# View filtered odometry messages
+ros2 topic echo /odom
+
+# View the transform connection
+ros2 run tf2_ros tf2_echo odom base_link
 ```

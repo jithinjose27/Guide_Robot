@@ -23,5 +23,10 @@ setup(
     extras_require={
         "test": ["pytest"],
     },
-    entry_points={},
+    entry_points={
+        "console_scripts": [
+            "glad_ekf_node = glad_simulation_sensor_filter.glad_ekf_node:main",
+        ],
+    },
 )
+

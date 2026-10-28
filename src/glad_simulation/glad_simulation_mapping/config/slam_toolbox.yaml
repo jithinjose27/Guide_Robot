@@ -1,4 +1,4 @@
-/slam_toolbox:
+/**:
   ros__parameters:
     angle_variance_penalty: 1.0
     base_frame: base_link

@@ -4,31 +4,71 @@
 
 ---
 
-**This is the top-level overview of all ROS 2 packages in the G.L.A.D project. Each subdirectory under `src/` is a ROS 2 package (or group of related packages) with its own `README.md` containing detailed documentation — refer to those for configuration, topics, parameters, and usage.**
+**This is the top-level overview of all ROS 2 packages in the G.L.A.D project, modernized for ROS 2 Jazzy Jalisco on Ubuntu 24.04 LTS. Each subdirectory under `src/` is a ROS 2 package (or group of related packages) with its own comprehensive, teaching-focused `README.md` containing detailed documentation — refer to those for configuration, circuit pinouts, mathematical foundations, topics, and usage.**
 
 ---
 
-## Package Overview
+## 🛠️ System Prerequisites & Installation
+
+### Environment
+- **Operating System:** Ubuntu 24.04 LTS (Noble Numbat)
+- **ROS Distribution:** ROS 2 Jazzy Jalisco
+- **Python Version:** Python 3.12
+
+### 1. Install ROS 2 Jazzy System Dependencies
+```bash
+sudo apt update && sudo apt install -y \
+  ros-jazzy-desktop \
+  ros-jazzy-navigation2 \
+  ros-jazzy-nav2-bringup \
+  ros-jazzy-slam-toolbox \
+  ros-jazzy-robot-localization \
+  ros-jazzy-tf2-tools \
+  ros-jazzy-ros-gz \
+  ros-jazzy-ros-gz-bridge \
+  ros-jazzy-ros-gz-interfaces \
+  python3-colcon-common-extensions \
+  python3-xacro \
+  python3-pip \
+  mpg123 \
+  alsa-utils
+```
+
+### 2. Install Python Dependencies
+```bash
+pip install --break-system-packages --user \
+  pyserial \
+  numpy \
+  google-genai \
+  gTTS \
+  edge-tts \
+  pygame \
+  SpeechRecognition
+```
+
+---
+
+## 📦 Package Overview
 
 | Directory | Description |
 |-----------|-------------|
-| `glad_imu/` | BNO055 IMU hardware driver (`glad_imu_publisher`) and Madgwick orientation filter (`glad_imu_filter`). Publishes raw IMU data and fused orientation. |
-| `glad_lidar/` | RPLidar serial driver (`glad_rplidar`), scan filter + resampler (`glad_laser_filter`), and range-flow laser odometry (`rf2o_laser_odometry`). |
-| `glad_mapping/` | SLAM wrapper around `slam_toolbox` for online laser-based mapping with Ceres solver and loop closure. |
-| `glad_maps/` | Pre-built occupancy grid map files (`robotics_floor/`, `jithin_home/`). |
-| `glad_motion_control/` | Motion pipeline: keyboard teleop (`glad_teleop`), priority twist multiplexer (`glad_twist_mux`), slew-rate trajectory limiter (`glad_trajectory_controller`), and ESP32 motor driver with encoder odometry (`glad_motor_controller`). |
-| `glad_navigation/` | Nav2-based autonomous navigation: AMCL localization, Regulated Pure Pursuit controller, NavFN global planner, costmaps, and recovery behaviors. |
-| `glad_sensor_filter/` | Extended Kalman Filter via `robot_localization` fusing laser odometry (velocity) and IMU (yaw) into a single filtered odometry estimate. |
-| `glad_static_tf/` | Static transform broadcaster for sensor mount offsets (`base_link` → `laser`, `base_link` → `imu_link`). |
-| `glad_tour/` | Autonomous tour guide — navigates predefined waypoints via Nav2 and delivers AI-generated spoken commentary using Gemini + gTTS. |
-| `glad_voice/` | Voice-activated AI assistant with wake word detection, Google STT, Gemini streaming responses, and Edge TTS. |
-| `glad_simulation/` | Gazebo-based simulation stack for the G.L.A.D robot. Includes URDF/Gazebo integration, curses teleop, twist mux, trajectory controller, EKF sensor fusion, SLAM Toolbox, and Nav2. See [`src/glad_simulation/README.md`](src/glad_simulation/README.md). |
-| `start_glad/` | Top-level bringup packages: `glad_bringup` (full system bringup for testing/navigation) and `glad_final_tour` (complete project showcase including the autonomous tour). |
-| `x_old_bringup/` | Archived/legacy bringup (kept for reference). |
+| [`glad_imu/`](src/glad_imu/README.md) | BNO055 IMU hardware driver (`glad_imu_publisher`) and Madgwick 6-DoF orientation filter (`glad_imu_filter`). Publishes raw IMU data and fused orientation with continuous sampling. |
+| [`glad_lidar/`](src/glad_lidar/README.md) | Official protocol RPLidar serial driver (`glad_rplidar`), scan range filter + uniform 360-bin resampler (`glad_laser_filter`), and range-flow laser odometry (`rf2o_laser_odometry`). |
+| [`glad_mapping/`](src/glad_mapping/README.md) | SLAM wrapper around `slam_toolbox` for online laser-based mapping with Ceres non-linear optimization and loop closure. |
+| [`glad_maps/`](src/glad_maps/README.md) | Portable ROS 2 package containing pre-built occupancy grid map files (`robotics_floor/`, `jithin_home/`). |
+| [`glad_motion_control/`](src/glad_motion_control/README.md) | Motion pipeline: keyboard teleop (`glad_teleop`), priority twist multiplexer (`glad_twist_mux`), slew-rate acceleration limiter (`glad_trajectory_controller`), and ESP32 motor driver with odometry (`glad_motor_controller`). |
+| [`glad_navigation/`](src/glad_navigation/README.md) | Nav2-based autonomous navigation: AMCL localization, Regulated Pure Pursuit controller, Navfn global planner, costmaps, and recovery behaviors updated to ROS 2 Jazzy standards. |
+| [`glad_sensor_filter/`](src/glad_sensor_filter/README.md) | Extended Kalman Filter fusing laser odometry (translational velocity), wheel encoders, and IMU (heading/yaw) into a filtered odometry estimate with dual-mode support (built-in Python EKF or `robot_localization`). |
+| [`glad_static_tf/`](src/glad_static_tf/README.md) | Static transform broadcaster for sensor mount offsets (`base_link` → `laser`, `base_link` → `imu_link`) with configurable launch parameters. |
+| [`glad_tour/`](src/glad_tour/README.md) | Autonomous tour guide — navigates predefined waypoints via Nav2 and delivers AI-generated spoken commentary using Gemini + gTTS with offline station fallback. |
+| [`glad_voice/`](src/glad_voice/README.md) | Multi-threaded voice-activated AI assistant with wake word detection, Google STT, Gemini streaming responses, Edge TTS, and offline fallback responses. |
+| [`glad_simulation/`](src/glad_simulation/README.md) | Gazebo Harmonic (`gz-sim`) digital twin simulation stack for G.L.A.D. Includes URDF/Xacro, Gazebo Sim plugins, curses teleop, twist mux, trajectory controller, EKF, SLAM Toolbox, and Nav2. |
+| [`start_glad/`](src/start_glad/README.md) | Top-level bringup packages: `glad_bringup` (full system bringup for testing/navigation) and `glad_final_tour` (complete project showcase including the autonomous tour). |
+| `x_old_bringup/` | Archived/legacy bringup (kept for historical reference). |
 
 ---
 
-## System Architecture
+## 🏗️ System Architecture
 
 ### Sensor Pipeline
 
@@ -42,23 +82,23 @@ BNO055 ──► glad_imu_publisher ──► /imu/data_raw ──► glad_imu_f
                             ▼
 rf2o_laser_odometry ──► /odom_rf2o ──┐
                                       ▼
-motor encoders ──► /motor/odom ──► glad_ekf (robot_localization) ──► /odom
+motor encoders ──► /motor/odom ──► glad_ekf (fused state) ─────────────► /odom
                                       ▲
                                /imu/data
 ```
 
-### TF Tree
+### Coordinate Frames (TF Tree)
 
 ```
-map ──► odom ──► base_link ──┬──► laser       (static, x=0.10, z=0.05)
-                              └──► imu_link    (static, x=0.05)
+map ──► odom ──► base_link ──┬──► laser       (static: x=0.10, z=0.05)
+                              └──► imu_link    (static: x=0.05, z=0.00)
 ```
 
-- `map → odom`: AMCL (Nav2) or `slam_toolbox`.
-- `odom → base_link`: EKF filter.
-- `base_link → laser/imu_link`: Static transforms.
+- `map → odom`: Published by AMCL (Nav2) during navigation or `slam_toolbox` during mapping.
+- `odom → base_link`: Published continuously by the Extended Kalman Filter (`glad_ekf_node` / `robot_localization`).
+- `base_link → laser / imu_link`: Published by `glad_static_tf`.
 
-### Command & Control Flow
+### Command & Velocity Flow
 
 ```
 Teleop Keyboard ──► /cmd_vel/teleop ──┐  Priority: stop(100) > teleop(70) > nav(40)
@@ -66,7 +106,7 @@ Teleop Keyboard ──► /cmd_vel/teleop ──┐  Priority: stop(100) > teleo
 Nav2 ──► /cmd_vel/nav ──► glad_twist_mux ──► /cmd_vel/raw ──► glad_trajectory_controller
                                                                      │
                                                                      ▼ /cmd_vel
-                                                          glad_motor_controller ──► ESP32
+                                                          glad_motor_controller ──► ESP32 (UART)
                                                                      │
                                                                      ▼ /motor/odom
 ```
@@ -74,52 +114,71 @@ Nav2 ──► /cmd_vel/nav ──► glad_twist_mux ──► /cmd_vel/raw ─�
 ### Application Layer
 
 ```
-glad_tour ──► nav2_simple_commander ──► goal poses → Nav2 → /cmd_vel/nav
+glad_tour ──► BasicNavigator (Nav2) ──► Waypoints → Nav2 → /cmd_vel/nav
               │
-              └──► Gemini ──► gTTS ──► USB speaker
+              └──► Google Gemini ──► gTTS / mpg123 ──► USB Speaker
 
-glad_voice ──► Wake word → STT → Gemini streaming → Edge TTS → USB speaker
+glad_voice ──► Microphone → SpeechRecognition → Google Gemini → Edge TTS ──► USB Speaker
 ```
 
 ---
 
-## Launching the Robot
+## 🚀 Launching the Robot
 
-### Navigation / Testing Mode
+### 1. Build the Workspace
+```bash
+cd ~/Guide_Robot
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+```
 
+### 2. Autonomous Navigation Mode (Pre-built Map)
+Starts all sensors, sensor fusion, motor controllers, and the full Nav2 stack using the portable `glad_maps` share path:
 ```bash
 ros2 launch glad_bringup glad_bringup_launch.py
 ```
 
-Starts all sensors, filtering, odometry, teleop, and Nav2 with a pre-built map.
-
-### SLAM Mode (Build a New Map)
-
+### 3. SLAM Mode (Generate a New Map)
+Replaces Nav2 with `slam_toolbox` for real-time laser SLAM:
 ```bash
 ros2 launch glad_bringup glad_bringup_launch.py enable_slam:=true
 ```
 
-Replaces Nav2 with `slam_toolbox` for online mapping.
-
-### Final Tour Showcase
-
+To save the completed map:
 ```bash
+ros2 run nav2_map_server map_saver_cli -f ~/my_new_map
+```
+
+### 4. Full Autonomous Tour Showcase
+Launches the entire robot stack and triggers the autonomous multi-station tour with AI commentary:
+```bash
+# Optional: export your Gemini API key for dynamic generation
+export GEMINI_API_KEY="your_api_key_here"
+
 ros2 launch glad_final_tour glad_final_tour_launch.py
 ```
-
-Extends bringup with the autonomous tour guide — navigates waypoints with AI commentary.
+*(If no API key or internet is available, G.L.A.D automatically falls back to its built-in offline commentary scripts without failing).*
 
 ---
 
-## Build
+## 🎮 Virtual Simulation (Gazebo Harmonic)
+
+Want to test G.L.A.D in simulation without the physical robot?
 
 ```bash
-colcon build
-source install/setup.bash
+# Launch Gazebo Sim Harmonic with the logistics warehouse:
+ros2 launch start_glad_simulation start_glad_simulation.launch.py enable_slam:=true
 ```
+
+Refer to [`src/glad_simulation/README.md`](src/glad_simulation/README.md) for full simulation details.
 
 ---
 
-## Details
+## 📖 Educational Documentation
 
-For per-package details on topics, parameters, launch arguments, configuration files, and dependencies, see the `README.md` inside each package directory.
+Every individual package in this repository includes a dedicated `README.md` formatted like a comprehensive robotics masterclass:
+- Explains the **theory and mathematical formulas** (Madgwick filtering, Kalman sensor fusion, range-flow odometry).
+- Details **hardware wiring schematics and pinouts** (BNO055 I2C, RPLidar UART, ESP32 motor controller).
+- Documents all **published and subscribed ROS 2 topics**, message types, and configurable parameters.
+- Outlines **troubleshooting guides** with practical diagnostic steps.

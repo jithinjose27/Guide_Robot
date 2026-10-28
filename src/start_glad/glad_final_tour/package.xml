@@ -2,12 +2,16 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>glad_final_tour</name>
-  <version>0.0.0</version>
-  <description>G.L.A.D. Final Tour Package</description>
-  <maintainer email="jithin27j@gmail.com">root</maintainer>
-  <license>Apache 2.0</license>
+  <version>1.0.0</version>
+  <description>Final autonomous tour showcase bringup package for the G.L.A.D mobile robot</description>
+  <maintainer email="jithin27j@gmail.com">Jithin Jose</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>glad_bringup</exec_depend>
+  <exec_depend>glad_tour</exec_depend>
+  <exec_depend>glad_maps</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

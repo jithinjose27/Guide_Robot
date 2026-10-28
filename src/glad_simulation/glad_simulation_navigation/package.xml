@@ -11,6 +11,8 @@
   <depend>nav2_msgs</depend>
   <depend>launch_ros</depend>
   <depend>navigation2</depend>
+  <exec_depend>glad_maps</exec_depend>
+
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

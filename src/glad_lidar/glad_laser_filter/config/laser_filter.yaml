@@ -1,14 +1,14 @@
-glad_laser_filter:
+/**:
   ros__parameters:
     input_scan_topic: /scan_unfiltered
     output_scan_topic: /scan
-    target_beams: 544
+    target_beams: 360
 
     filter1:
       name: angle
       type: angular_bounds
-      lower_angle: 1.5708
-      upper_angle: -1.5708
+      lower_angle: -1.5708
+      upper_angle: 1.5708
 
     filter2:
       name: range

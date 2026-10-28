@@ -1,10 +1,10 @@
-# GLAD IMU 🧭
+# GLAD IMU
 
 Welcome to the **`glad_imu`** package! An Inertial Measurement Unit (IMU) is the inner ear of the robot — it gives G.L.A.D an intuitive sense of balance, orientation, and angular turning speed even in pitch darkness or wheel-slip conditions.
 
 ---
 
-## 🔬 How Inertial Navigation Works
+## How Inertial Navigation Works
 
 The G.L.A.D robot uses an **Adafruit BNO055 9-DOF** (Degrees of Freedom) sensor connected via $I^2C$. It contains:
 1. **3-Axis Gyroscope:** Measures instantaneous rotational velocity ($\omega_x, \omega_y, \omega_z$ in $\text{rad/s}$). Excellent for fast movements, but drifts over time.
@@ -37,7 +37,7 @@ The G.L.A.D robot uses an **Adafruit BNO055 9-DOF** (Degrees of Freedom) sensor 
 
 ---
 
-## 🧮 The Madgwick Filter Algorithm
+## The Madgwick Filter Algorithm
 
 Why not just integrate gyroscope readings over time ($\theta_{new} = \theta_{old} + \omega \cdot dt$)?
 Because tiny sensor biases accumulate every millisecond, causing the robot to believe it is spinning even while stationary!
@@ -52,7 +52,7 @@ The filter gain $\beta$ balances responsiveness against noise:
 
 ---
 
-## 📦 Packages Overview
+## Packages Overview
 
 ### 1. `glad_imu_publisher`
 - **Driver:** Pure Python driver interfacing with the BNO055.
@@ -80,7 +80,7 @@ The filter gain $\beta$ balances responsiveness against noise:
 
 ---
 
-## 🔌 Wiring & Hardware Setup (Raspberry Pi)
+## Wiring & Hardware Setup (Raspberry Pi)
 
 | BNO055 Pin | Raspberry Pi Pin | Function |
 |---|---|---|
@@ -102,7 +102,7 @@ i2cdetect -y 1
 
 ---
 
-## 🚀 Building & Launching
+## Building & Launching
 
 ```bash
 colcon build --packages-select glad_imu_publisher glad_imu_filter

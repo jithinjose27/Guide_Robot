@@ -1,10 +1,10 @@
-# GLAD Start (System Bringup Orchestrator) 🏁
+# GLAD Start (System Bringup Orchestrator)
 
 Welcome to the **`start_glad`** master orchestrator! When deploying G.L.A.D. on real hardware, you do not need to manually open 10 terminals to launch individual drivers and controllers. Everything is orchestrated here through two primary launch packages:
 
 ---
 
-## 🚀 The Two Master Launch Files
+## The Two Master Launch Files
 
 | Launch Package | Launch Command | Purpose |
 |---|---|---|
@@ -13,7 +13,7 @@ Welcome to the **`start_glad`** master orchestrator! When deploying G.L.A.D. on 
 
 ---
 
-## ⏱️ Why Are Launch Times Sequenced?
+## Why Are Launch Times Sequenced?
 
 In complex mobile robotics systems, starting 15 nodes simultaneously at timestamp $t = 0$ leads to race conditions:
 1. The laser filter tries to subscribe to `/scan_unfiltered` before the RPLidar serial connection is established.
@@ -38,7 +38,7 @@ To ensure deterministic, error-free startup, `start_glad` staggers subsystem ini
 
 ---
 
-## 🛠️ Usage Instructions
+## Usage Instructions
 
 ### 1. Navigation & Hardware Testing (Everything except Tour)
 Use this command while developing, tuning costmaps, driving with the keyboard teleop, or testing Nav2 waypoint goals via RViz:
@@ -81,7 +81,7 @@ ros2 launch glad_final_tour glad_final_tour_launch.py enable_voice:=true
 
 ---
 
-## 📦 Building the Bringup Packages
+## Building the Bringup Packages
 
 ```bash
 cd ~/Guide_Robot

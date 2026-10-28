@@ -1,10 +1,10 @@
-# GLAD Motion Control 🚀
+# GLAD Motion Control
 
 Welcome to the **`glad_motion_control`** pipeline! This is the motor execution and drive system of G.L.A.D. It turns high-level desires ("drive to coordinates $(3.5, 2.0)$" or "turn left") into physical wheel rotations on the ground.
 
 ---
 
-## 🏎️ The Motion Control Pipeline
+## The Motion Control Pipeline
 
 Safety and smoothness are paramount when controlling physical robots. If you send raw, abrupt step changes in velocity directly to DC motors, wheels slip, gears strip, and the robot jerks violently!
 
@@ -55,7 +55,7 @@ The G.L.A.D motion pipeline solves this with a 4-stage layered architecture:
 
 ---
 
-## 📦 Subpackages Detailed
+## Subpackages Detailed
 
 ### 1. `glad_twist_mux` — Priority Multiplexer
 - **Role:** Mediates between human operators and autonomous navigation.
@@ -99,7 +99,7 @@ The G.L.A.D motion pipeline solves this with a 4-stage layered architecture:
 
 ---
 
-## 🚀 Building & Launching
+## Building & Launching
 
 ```bash
 colcon build --packages-select glad_teleop glad_twist_mux glad_trajectory_controller glad_motor_controller

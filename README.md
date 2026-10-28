@@ -8,7 +8,7 @@
 
 ---
 
-## 🛠️ System Prerequisites & Installation
+## System Prerequisites & Installation
 
 ### Environment
 - **Operating System:** Ubuntu 24.04 LTS (Noble Numbat)
@@ -48,7 +48,7 @@ pip install --break-system-packages --user \
 
 ---
 
-## 📦 Package Overview
+## Package Overview
 
 | Directory | Description |
 |-----------|-------------|
@@ -68,7 +68,7 @@ pip install --break-system-packages --user \
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ### Sensor Pipeline
 
@@ -123,7 +123,7 @@ glad_voice ──► Microphone → SpeechRecognition → Google Gemini → Edge
 
 ---
 
-## 🚀 Launching the Robot
+## Launching the Robot
 
 ### 1. Build the Workspace
 ```bash
@@ -162,7 +162,7 @@ ros2 launch glad_final_tour glad_final_tour_launch.py
 
 ---
 
-## 🎮 Virtual Simulation (Gazebo Harmonic)
+## Virtual Simulation (Gazebo Harmonic)
 
 Want to test G.L.A.D in simulation without the physical robot?
 
@@ -175,7 +175,8 @@ Refer to [`src/glad_simulation/README.md`](src/glad_simulation/README.md) for fu
 
 ---
 
-## 📖 Educational Documentation
+## Educational Documentation
+
 
 Every individual package in this repository includes a dedicated `README.md` formatted like a comprehensive robotics masterclass:
 - Explains the **theory and mathematical formulas** (Madgwick filtering, Kalman sensor fusion, range-flow odometry).

@@ -1,10 +1,10 @@
-# GLAD Sensor Filter (EKF) 🛰️
+# GLAD Sensor Filter (EKF)
 
 Welcome to the **`glad_sensor_filter`** package! This is the state estimation core of the robot. It takes noisy, imperfect readings from multiple different sensors and fuses them into a single, crystal-clear, rock-steady estimate of the robot's position and velocity.
 
 ---
 
-## 🧭 Why Do We Need Sensor Fusion?
+## Why Do We Need Sensor Fusion?
 
 No single sensor on a mobile robot is perfect:
 - **Wheel Encoders:** Great for tracking short-distance wheel rotation, but when wheels slip on smooth floors or bump over door sills, the robot thinks it is moving when it isn't.
@@ -15,7 +15,7 @@ No single sensor on a mobile robot is perfect:
 
 ---
 
-## 🔄 The Data Flow Architecture
+## The Data Flow Architecture
 
 ```
  Laser Odometry         Wheel Encoders               Madgwick IMU
@@ -43,7 +43,7 @@ No single sensor on a mobile robot is perfect:
 
 ---
 
-## ⚙️ Dual-Mode Flexibility: Python or C++
+## Dual-Mode Flexibility: Python or C++
 
 To ensure **everyone can run this project effortlessly on any machine**, this package supports two complementary execution engines:
 
@@ -59,7 +59,7 @@ To ensure **everyone can run this project effortlessly on any machine**, this pa
 
 ---
 
-## 🛠️ Configuration (`config/glad_ekf_params.yaml`)
+## Configuration (`config/glad_ekf_params.yaml`)
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -71,7 +71,7 @@ To ensure **everyone can run this project effortlessly on any machine**, this pa
 
 ---
 
-## 🚀 Building & Launching
+## Building & Launching
 
 ```bash
 colcon build --packages-select glad_sensor_filter

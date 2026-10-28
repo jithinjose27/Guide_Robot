@@ -69,15 +69,15 @@ SPEAKER_HW = find_usb_speaker()
 def init_gemini():
     """Initialize the Google GenAI SDK client if API key is present."""
     if not GEMINI_API_KEY or GEMINI_API_KEY.startswith("YOUR_"):
-        print("ℹ️  Note: GEMINI_API_KEY not set. Using built-in laboratory tour scripts.")
+        print("Note: GEMINI_API_KEY not set. Using built-in laboratory tour scripts.")
         return None
     try:
         from google import genai
         client = genai.Client(api_key=GEMINI_API_KEY)
-        print(f"✓ Gemini AI ({GEMINI_MODEL_NAME}) initialized successfully.")
+        print(f"[OK] Gemini AI ({GEMINI_MODEL_NAME}) initialized successfully.")
         return client
     except Exception as e:
-        print(f"⚠️  Gemini client initialization notice: {e}. Falling back to local scripts.")
+        print(f"[WARN] Gemini client initialization notice: {e}. Falling back to local scripts.")
         return None
 
 
@@ -98,7 +98,7 @@ def generate_speech(client, station_name: str, prompt: str) -> str:
             if text:
                 return text
         except Exception as e:
-            print(f"⚠️  Gemini API error ({e}). Using curated station script.")
+            print(f"[WARN] Gemini API error ({e}). Using curated station script.")
 
     return DEFAULT_STATION_SCRIPTS.get(station_name, "Welcome to this department laboratory station!")
 
@@ -109,7 +109,7 @@ def speak(text: str):
     if not clean_text:
         return
 
-    print(f"\n🤖 G.L.A.D.: \"{clean_text}\"\n")
+    print(f"\nG.L.A.D.: \"{clean_text}\"\n")
 
     # Try generating speech audio via gTTS if installed
     try:
@@ -142,7 +142,7 @@ def speak(text: str):
             pass
     except Exception as e:
         # If gTTS or audio output fails, console output remains crystal clear
-        print(f"🔊 Audio playback notice: {e}")
+        print(f"Audio playback notice: {e}")
 
 
 def make_quaternion(z: float, w: float):
@@ -175,7 +175,7 @@ def main(args=None):
 
     print("Waiting for Nav2 navigation stack to become active...")
     navigator.waitUntilNav2Active()
-    print("✓ Nav2 stack is fully active and ready.")
+    print("[OK] Nav2 stack is fully active and ready.")
 
     speak("Navigation systems are online. Hello everyone, let us begin the tour!")
 
@@ -208,7 +208,7 @@ def main(args=None):
 
     for point in waypoints:
         station_name = point["name"]
-        print(f"\n🚗 Navigating to {station_name} (x={point['x']}, y={point['y']})...")
+        print(f"\nNavigating to {station_name} (x={point['x']}, y={point['y']})...")
 
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = "map"
@@ -237,16 +237,16 @@ def main(args=None):
 
         result = navigator.getResult()
         if result == TaskResult.SUCCEEDED:
-            print(f"✓ Arrived successfully at {station_name}!")
+            print(f"[OK] Arrived successfully at {station_name}!")
             speech = generate_speech(gemini_client, station_name, point["prompt"])
             speak(speech)
             time.sleep(1.0)
         elif result == TaskResult.CANCELED:
-            print(f"⚠️ Navigation to {station_name} was canceled.")
+            print(f"[WARN] Navigation to {station_name} was canceled.")
             speak("My navigation task was canceled.")
             break
         elif result == TaskResult.FAILED:
-            print(f"❌ Failed to reach {station_name}.")
+            print(f"[ERROR] Failed to reach {station_name}.")
             speak("I apologize, my path appears blocked. I will pause here.")
             break
 

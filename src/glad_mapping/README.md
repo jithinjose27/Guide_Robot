@@ -1,10 +1,10 @@
-# GLAD Mapping (SLAM Toolbox) 🗺️
+# GLAD Mapping (SLAM Toolbox)
 
 Welcome to the **`glad_mapping`** package! This package provides the robot's ability to explore an unknown environment and draw its own map from scratch using **SLAM (Simultaneous Localization and Mapping)**.
 
 ---
 
-## 🔍 How SLAM Works
+## How SLAM Works
 
 Imagine walking into a dark, unfamiliar building with a flashlight. Every step you take, you ask:
 - *"Where did I just walk from?"* (Odometry tracking)
@@ -35,7 +35,7 @@ SLAM solves the classic "chicken-and-egg" robotics dilemma: you need a map to kn
 
 ---
 
-## 💡 What Makes SLAM Toolbox Special?
+## What Makes SLAM Toolbox Special?
 
 G.L.A.D uses `slam_toolbox` in **asynchronous mapping mode**:
 1. **Pose Graph Optimization (Ceres Solver):** Every key scan is saved as a node in an elastic graph connected by mathematical springs (transform constraints).
@@ -44,7 +44,7 @@ G.L.A.D uses `slam_toolbox` in **asynchronous mapping mode**:
 
 ---
 
-## 🛠️ Key Configuration Parameters (`config/slam_toolbox.yaml`)
+## Key Configuration Parameters (`config/slam_toolbox.yaml`)
 
 | Parameter | Value | What it means |
 |---|---|---|
@@ -59,7 +59,7 @@ G.L.A.D uses `slam_toolbox` in **asynchronous mapping mode**:
 
 ---
 
-## 🚀 How to Build a Map of Your Space
+## How to Build a Map of Your Space
 
 1. **Start the bringup stack in SLAM mode:**
    ```bash
@@ -80,7 +80,7 @@ G.L.A.D uses `slam_toolbox` in **asynchronous mapping mode**:
 
 ---
 
-## 📦 Building
+## Building
 
 ```bash
 colcon build --packages-select glad_mapping

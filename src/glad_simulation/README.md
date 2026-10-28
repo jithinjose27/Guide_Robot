@@ -1,4 +1,4 @@
-# 🤖 G.L.A.D. Simulation Suite (ROS 2 Jazzy & Gazebo Harmonic)
+# G.L.A.D. Simulation Suite (ROS 2 Jazzy & Gazebo Harmonic)
 
 Welcome to the digital twin and simulation environment of the **G.L.A.D.** (Generic Logistics Autonomous Device) guide robot!
 
@@ -6,7 +6,7 @@ One of the best principles in modern robotics is: **test in simulation before de
 
 ---
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 The simulation stack faithfully reproduces the physical robot's sensor pipeline, kinematics, and control architecture:
 
@@ -35,7 +35,7 @@ The simulation stack faithfully reproduces the physical robot's sensor pipeline,
 
 ---
 
-## 📦 Packages in this Directory
+## Packages in this Directory
 
 | Package | Purpose |
 |---|---|
@@ -51,7 +51,7 @@ The simulation stack faithfully reproduces the physical robot's sensor pipeline,
 
 ---
 
-## 🚀 Prerequisites & Installation
+## Prerequisites & Installation
 
 To run the simulation on Ubuntu 24.04 with ROS 2 Jazzy:
 
@@ -81,7 +81,7 @@ To run the simulation on Ubuntu 24.04 with ROS 2 Jazzy:
 
 ---
 
-## 🎮 Launching the Simulation
+## Launching the Simulation
 
 ### Mode 1: SLAM Mapping Mode (Drive & Build a Map)
 Spawn the robot in the virtual warehouse and build a map with your keyboard:
@@ -105,7 +105,7 @@ ros2 launch start_glad_simulation start_glad_simulation.launch.py enable_slam:=f
 
 ---
 
-## 🕹️ Keyboard Controls
+## Keyboard Controls
 
 When running `teleop_node`, you can drive G.L.A.D using your keyboard:
 
@@ -130,7 +130,7 @@ When running `teleop_node`, you can drive G.L.A.D using your keyboard:
 
 ---
 
-## 🌍 Virtual Worlds Included
+## Virtual Worlds Included
 
 1. **`warehouse.world`** (Default): A realistic 20m × 15m logistics warehouse complete with perimeter walls, storage shelf corridors, structural pillars, and open runways.
 2. **`empty.world`**: A clean, infinite ground plane with sunlight and physics plugins for basic testing and odometry calibration.
@@ -142,7 +142,7 @@ ros2 launch start_glad_simulation start_glad_simulation.launch.py world:=$(ros2 
 
 ---
 
-## 💡 Teaching Tips & Troubleshooting
+## Teaching Tips & Troubleshooting
 
 - **Simulated Time Synchronization (`use_sim_time:=true`)**: In simulation, all nodes must synchronize with Gazebo's `/clock` rather than the computer's system wall clock. The launch files automatically propagate `use_sim_time:=true` to all nodes and the Nav2 lifecycle manager.
 - **Headless & Virtual Machines**: If running inside WSL2 or on a server without an OpenGL GPU, you can run Gazebo headless by passing Gazebo server arguments, or launch RViz on your host display.

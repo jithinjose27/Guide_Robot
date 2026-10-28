@@ -1,10 +1,10 @@
-# GLAD LiDAR 📡
+# GLAD LiDAR
 
 Welcome to the **`glad_lidar`** sensor pipeline! If the wheels are the legs of the G.L.A.D robot, the LiDAR is its eyes. This directory contains everything needed to interface with physical 2D laser scanners, clean raw beam returns, and calculate smooth planar odometry purely from laser scan changes.
 
 ---
 
-## 🏗️ Architecture & Data Flow
+## Architecture & Data Flow
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -43,7 +43,7 @@ Welcome to the **`glad_lidar`** sensor pipeline! If the wheels are the legs of t
 
 ---
 
-## 📦 Subpackages Detailed
+## Subpackages Detailed
 
 ### 1. `glad_rplidar` — Hardware Serial Driver
 - **What it does:** Directly talks to SLAMTEC RPLidar sensors (A1, A2, A3).
@@ -89,7 +89,7 @@ Welcome to the **`glad_lidar`** sensor pipeline! If the wheels are the legs of t
 
 ---
 
-## 🛠️ Hardware Setup & Permissions
+## Hardware Setup & Permissions
 
 If you get a `Permission Denied` error when connecting to your LiDAR:
 
@@ -106,7 +106,7 @@ If you get a `Permission Denied` error when connecting to your LiDAR:
 
 ---
 
-## 🚀 Building & Testing
+## Building & Testing
 
 ```bash
 colcon build --packages-select glad_rplidar glad_laser_filter rf2o_laser_odometry

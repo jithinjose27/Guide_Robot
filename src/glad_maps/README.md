@@ -1,10 +1,10 @@
-# GLAD Maps 🗺️
+# GLAD Maps
 
 Welcome to the **`glad_maps`** package! This package is the robot's geographic memory. It contains pre-built 2D occupancy grid maps that the G.L.A.D mobile robot uses for autonomous localization and navigation.
 
 ---
 
-## 🧭 What is an Occupancy Grid Map?
+## What is an Occupancy Grid Map?
 
 When a mobile robot navigates through an indoor environment, it needs a digital floor plan to answer two essential questions:
 1. **"Where am I right now?"** (Localization via AMCL)
@@ -21,7 +21,7 @@ Each map consists of two files:
 
 ---
 
-## 📂 Available Maps
+## Available Maps
 
 | Map Directory | Resolution | Origin [x, y, yaw] | Environment Description |
 |---|---|---|---|
@@ -30,7 +30,7 @@ Each map consists of two files:
 
 ---
 
-## ⚙️ Understanding the YAML Metadata
+## Understanding the YAML Metadata
 
 Here is how `robotics_floor/robotics_floor.yaml` is structured:
 
@@ -53,7 +53,7 @@ free_thresh: 0.25
 
 ---
 
-## 🛠️ How to Create and Save Your Own Map
+## How to Create and Save Your Own Map
 
 Want to use G.L.A.D in your own college lab, office, or living room? Here is the exact workflow:
 
@@ -72,7 +72,7 @@ Want to use G.L.A.D in your own college lab, office, or living room? Here is the
 
 ---
 
-## 🚀 Building & Using in Launch Files
+## Building & Using in Launch Files
 
 This package installs its map directory directly into the ROS 2 workspace share directory:
 

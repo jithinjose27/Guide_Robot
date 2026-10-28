@@ -1,4 +1,4 @@
-# GLAD Tour (Autonomous AI Tour Guide) 🎓🤖
+# GLAD Tour (Autonomous AI Tour Guide)
 
 Welcome to the **`glad_tour`** package! This is where robotics navigation and modern Generative AI meet.
 
@@ -6,7 +6,7 @@ G.L.A.D acts as an autonomous docent: it navigates a sequence of designated labo
 
 ---
 
-## 🌟 How the Tour Works
+## How the Tour Works
 
 ```
                    1. Initialize Nav2 BasicNavigator
@@ -40,7 +40,7 @@ G.L.A.D acts as an autonomous docent: it navigates a sequence of designated labo
 
 ---
 
-## 📍 Designated Tour Stations
+## Designated Tour Stations
 
 | Stop | Location | Coordinates [X, Y, Yaw] | What G.L.A.D Explains |
 |---|---|---|---|
@@ -50,7 +50,7 @@ G.L.A.D acts as an autonomous docent: it navigates a sequence of designated labo
 
 ---
 
-## 💡 Generative AI with Offline Resilience
+## Generative AI with Offline Resilience
 
 To ensure that **anyone can run this project out of the box** without getting stuck on API keys or internet issues:
 - **Online with API Key:** If `GEMINI_API_KEY` is exported, G.L.A.D queries **`gemini-2.5-flash-lite`** on the fly. Gemini produces fresh, conversational responses tailored to the lab context.
@@ -58,7 +58,7 @@ To ensure that **anyone can run this project out of the box** without getting st
 
 ---
 
-## 🛠️ How to Customize for Your Own Lab or School
+## How to Customize for Your Own Lab or School
 
 Want to create a tour of your own college or office? Just edit the `waypoints` array in `glad_tour.py`:
 
@@ -86,7 +86,7 @@ waypoints = [
 
 ---
 
-## 🚀 Building & Launching
+## Building & Launching
 
 ```bash
 colcon build --packages-select glad_tour

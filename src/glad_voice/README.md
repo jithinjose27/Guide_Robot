@@ -1,10 +1,10 @@
-# GLAD Voice (Conversational AI Assistant) 🎙️
+# GLAD Voice (Conversational AI Assistant)
 
 Welcome to the **`glad_voice`** package! While navigation allows G.L.A.D to move around, the voice assistant gives the robot its personality and ability to engage in natural, interactive spoken Q&A with visitors and students.
 
 ---
 
-## 🗣️ How Voice Interaction Works
+## How Voice Interaction Works
 
 ```
            Microphone Audio (USB Sound Card)
@@ -39,7 +39,7 @@ Welcome to the **`glad_voice`** package! While navigation allows G.L.A.D to move
 
 ---
 
-## 🎯 State Machine: Standby vs. Active
+## State Machine: Standby vs. Active
 
 1. **Standby Mode (Sleep):**
    - The robot keeps its mouth shut to prevent echoes and ignores casual ambient chatter.
@@ -54,7 +54,7 @@ Welcome to the **`glad_voice`** package! While navigation allows G.L.A.D to move
 
 ---
 
-## 🛠️ Hardware Requirements & Software Setup
+## Hardware Requirements & Software Setup
 
 ### Required Hardware:
 - Any standard USB Audio Dongle or USB Speakerphone with built-in microphone and 3.5mm/speaker output.
@@ -73,7 +73,7 @@ export GEMINI_API_KEY="AIzaSy..."
 
 ---
 
-## 🚀 Building & Launching
+## Building & Launching
 
 ```bash
 colcon build --packages-select glad_voice

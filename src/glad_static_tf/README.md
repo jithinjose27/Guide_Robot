@@ -1,10 +1,10 @@
-# GLAD Static TF 📐
+# GLAD Static TF
 
 Welcome to the **`glad_static_tf`** package! Think of this package as the **physical blueprint** of the robot told in the language of coordinate frames.
 
 ---
 
-## 🤖 Why Do We Need Static Transforms?
+## Why Do We Need Static Transforms?
 
 A mobile robot is not a single point in space. It has physical dimensions and components mounted at different locations:
 - The **RPLidar** is mounted towards the front top deck so it has an unobstructed view of the room.
@@ -17,7 +17,7 @@ Without telling ROS where these sensors are physically bolted to the chassis, yo
 
 ---
 
-## 🌳 The TF Tree
+## The TF Tree
 
 ```
 map (World / Navigation Origin)
@@ -33,7 +33,7 @@ map (World / Navigation Origin)
 
 ---
 
-## 📏 Default Sensor Mounting Offsets
+## Default Sensor Mounting Offsets
 
 | Transform | X (Forward) | Y (Left) | Z (Up) | Roll / Pitch / Yaw | Physical Meaning |
 |---|---|---|---|---|---|
@@ -42,7 +42,7 @@ map (World / Navigation Origin)
 
 ---
 
-## 🛠️ How to Customize for Your Own Robot
+## How to Customize for Your Own Robot
 
 Did you build a custom chassis with different sensor locations? You don't need to touch the Python source code! You can easily pass your custom offsets as parameters:
 
@@ -64,7 +64,7 @@ ros2 run glad_static_tf static_tf_broadcaster --ros-args \
 
 ---
 
-## 🚀 Running & Verification
+## Running & Verification
 
 ### Launch:
 ```bash

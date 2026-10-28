@@ -1,10 +1,10 @@
-# GLAD Navigation (Nav2) 🧭
+# GLAD Navigation (Nav2)
 
 Welcome to the **`glad_navigation`** package! This package contains the brain of the G.L.A.D mobile robot's autonomous mobility, powered by the industry-standard **ROS 2 Navigation2 (Nav2)** stack.
 
 ---
 
-## 🎯 What Does Nav2 Do?
+## What Does Nav2 Do?
 
 When you tell G.L.A.D to guide a group of students to the Robotics Lab, Nav2 coordinates several specialized subsystems to get the robot there safely:
 
@@ -37,7 +37,7 @@ When you tell G.L.A.D to guide a group of students to the Robotics Lab, Nav2 coo
 
 ---
 
-## 🧩 The Core Components Explained
+## The Core Components Explained
 
 ### 1. AMCL (Adaptive Monte Carlo Localization)
 - **Role:** Keeps track of the robot's pose $(x, y, \theta)$ relative to the static map.
@@ -69,7 +69,7 @@ If someone steps directly in front of G.L.A.D, the robot doesn't freeze forever!
 
 ---
 
-## 🛠️ Key Topics & Interfaces
+## Key Topics & Interfaces
 
 | Topic | Type | Role |
 |---|---|---|
@@ -82,7 +82,7 @@ If someone steps directly in front of G.L.A.D, the robot doesn't freeze forever!
 
 ---
 
-## 🚀 Building & Launching
+## Building & Launching
 
 ```bash
 colcon build --packages-select glad_navigation

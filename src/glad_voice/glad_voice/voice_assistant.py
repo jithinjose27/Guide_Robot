@@ -85,15 +85,15 @@ class Config:
 def init_gemini():
     """Initialize Google GenAI client if key is available."""
     if not Config.GEMINI_API_KEY or Config.GEMINI_API_KEY.startswith("YOUR_"):
-        print("ℹ️  Note: GEMINI_API_KEY not set. Local Q&A fallback enabled.")
+        print("Note: GEMINI_API_KEY not set. Local Q&A fallback enabled.")
         return None
     try:
         from google import genai
         client = genai.Client(api_key=Config.GEMINI_API_KEY)
-        print(f"✓ Gemini AI ({Config.GEMINI_MODEL_NAME}) connected successfully.")
+        print(f"[OK] Gemini AI ({Config.GEMINI_MODEL_NAME}) connected successfully.")
         return client
     except Exception as e:
-        print(f"⚠️  Gemini client initialization error: {e}")
+        print(f"[WARN] Gemini client initialization error: {e}")
         return None
 
 
@@ -153,7 +153,7 @@ def speak(text: str, print_text: bool = True):
         return
 
     if print_text:
-        print(f"🤖 {Config.ASSISTANT_NAME}: \"{clean_text}\"")
+        print(f"{Config.ASSISTANT_NAME}: \"{clean_text}\"")
 
     try:
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
@@ -195,7 +195,7 @@ def speak(text: str, print_text: bool = True):
         except Exception:
             pass
     except Exception as e:
-        print(f"🔊 Audio playback note: {e}")
+        print(f"Audio playback note: {e}")
 
 
 def listen_mic(status_message: str):
@@ -211,10 +211,10 @@ def listen_mic(status_message: str):
 
     try:
         with sr.Microphone(device_index=Config.MIC_INDEX) as source:
-            print(f"\n🎤 {status_message}")
+            print(f"\n{status_message}")
             audio = recognizer.listen(source, timeout=7, phrase_time_limit=15)
             text = recognizer.recognize_google(audio)
-            print(f"👤 User: \"{text}\"")
+            print(f"User: \"{text}\"")
             return text.lower()
     except (sr.WaitTimeoutError, sr.UnknownValueError):
         return None
@@ -226,7 +226,7 @@ def listen_mic(status_message: str):
 class VoiceAssistantNode(Node):
     def __init__(self):
         super().__init__("voice_assistant_node")
-        self.get_logger().info(f"🚀 Starting {Config.ASSISTANT_NAME} Voice Q&A Assistant")
+        self.get_logger().info(f"Starting {Config.ASSISTANT_NAME} Voice Q&A Assistant")
 
         self.client = init_gemini()
         self.is_awake = False
@@ -279,7 +279,7 @@ class VoiceAssistantNode(Node):
                     clean_command = clean_command.replace(w, "").strip()
 
                 if clean_command:
-                    print(f"🤖 {Config.ASSISTANT_NAME}: ", end="", flush=True)
+                    print(f"{Config.ASSISTANT_NAME}: ", end="", flush=True)
                     for sentence in ask_gemini_stream(self.client, clean_command):
                         print(sentence + " ", end="", flush=True)
                         speak(sentence, print_text=False)

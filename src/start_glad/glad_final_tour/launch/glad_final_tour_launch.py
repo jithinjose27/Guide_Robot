@@ -18,6 +18,7 @@ from launch.actions import (
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -57,8 +58,14 @@ def generate_launch_description():
             default_value=default_map,
             description="Absolute path to map YAML file (used when enable_slam:=false).",
         ),
+        DeclareLaunchArgument(
+            "enable_voice",
+            default_value="false",
+            description="Whether to run the interactive voice assistant (glad_voice) alongside the tour.",
+        ),
     ]
     base_args = {"use_sim_time": use_sim_time}
+
 
     # 1. Static TF
     static_tf = GroupAction(
@@ -158,6 +165,20 @@ def generate_launch_description():
         ]
     )
 
+    # 12. Interactive Voice Assistant (optional)
+    voice_assistant_launch = GroupAction(
+        [
+            LogInfo(msg="[GLAD Final Tour] 12. Activating Interactive AI Voice Assistant..."),
+            Node(
+                package="glad_voice",
+                executable="voice_assistant",
+                name="voice_assistant",
+                output="screen",
+            ),
+        ],
+        condition=IfCondition(LaunchConfiguration("enable_voice")),
+    )
+
     return LaunchDescription(
         args
         + [
@@ -173,5 +194,7 @@ def generate_launch_description():
             TimerAction(period=4.0, actions=[teleop_launch]),
             TimerAction(period=6.0, actions=[glad_nav2_launch]),
             TimerAction(period=10.0, actions=[glad_tour_launch]),
+            TimerAction(period=11.0, actions=[voice_assistant_launch]),
         ]
     )
+

@@ -64,7 +64,7 @@ pip install --break-system-packages --user \
 | [`glad_voice/`](src/glad_voice/README.md) | Multi-threaded voice-activated AI assistant with wake word detection, Google STT, Gemini streaming responses, Edge TTS, and offline fallback responses. |
 | [`glad_simulation/`](src/glad_simulation/README.md) | Gazebo Harmonic (`gz-sim`) digital twin simulation stack for G.L.A.D. Includes URDF/Xacro, Gazebo Sim plugins, curses teleop, twist mux, trajectory controller, EKF, SLAM Toolbox, and Nav2. |
 | [`start_glad/`](src/start_glad/README.md) | Top-level bringup packages: `glad_bringup` (full system bringup for testing/navigation) and `glad_final_tour` (complete project showcase including the autonomous tour). |
-| `x_old_bringup/` | Archived/legacy bringup (kept for historical reference). |
+
 
 ---
 
